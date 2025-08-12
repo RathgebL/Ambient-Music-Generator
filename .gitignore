@@ -1,0 +1,22 @@
+# SuperCollider-specific
+*.scsyndef        # Compiled SynthDefs
+*.osc             # OSC recording files
+*.aiff
+*.wav
+*.flac
+
+# OS / editor junk
+.DS_Store
+Thumbs.db
+
+# VS Code
+.vscode/
+*.code-workspace
+
+# Logs
+*.log
+
+# Temporary or backup files
+*~
+*.swp
+*.tmp
