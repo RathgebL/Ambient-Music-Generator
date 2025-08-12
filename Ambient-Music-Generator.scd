@@ -28,6 +28,39 @@ s.waitForBoot {
 	~fxSynth.set(\damp, 0.3);   // damping (0.0 = bright, 1.0 = muffled)
 
 
+	// --- FX utils ---
+	// Groupings
+	~srcGroup = Group.head(s);
+	~fxGroup  = Group.tail(s);
+
+	// (Re)create FX synth
+	~restartFX = {
+		try { ~fxSynth.free } { }; // free old one if present
+		~fxSynth = Synth(\globalFX, [\in, ~fxBus], target: ~fxGroup, addAction: \addToTail);
+		~fxSynth.set(\mix, 0.5, \room, 0.9, \damp, 0.3);
+		"FX chain restarted.".postln;
+	};
+
+	// Ensure FX exists and is running
+	~ensureFX = {
+		if(~fxSynth.isNil or: { ~fxSynth.isRunning.not }) {
+			"~fxSynth was missing; restarting…".postln;
+			~restartFX.();
+		} {
+			"FX chain OK.".postln;
+		};
+	};
+
+	// Install Cmd+. handler (defer so it runs after the stop)
+	if(~fxCmdHookAdded != true) {
+		CmdPeriod.add({ { ~restartFX.() }.defer });
+		~fxCmdHookAdded = true;
+	};
+
+	// Make sure FX is up now
+	~restartFX.();
+
+
 
 	// --- Parameter Mapping Engine ---
 
@@ -129,6 +162,7 @@ s.waitForBoot {
 
 	~playPad = { |note=60, dur=10, pan=0.0|
 		var freq = note.midicps;
+		~ensureFX.();
 		Synth(\padVoice, [
 			\out, ~fxBus,
 			\freq, freq,
@@ -176,7 +210,6 @@ s.waitForBoot {
 ~setParam.(\warmth, 0.8);
 ~setParam.(\brightness, 0.3);
 ~showMappedParams.();
+~fxSynth.set(\mix, 0.3, \room, 0.95, \damp, 0.2);
 ~playPadChord.([57, 60, 65, 69], 0.8, 0.5); // Play a pad chord
-~restartFX.(); // To be able to play again after cmd + .
-
-
+~restartFX.(); // Manuel restart to be able to play again after cmd + . incase the automatic restart did not work
