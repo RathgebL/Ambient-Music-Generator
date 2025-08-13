@@ -1,65 +1,51 @@
+
+s.reboot;
+
 (
 // -------------------------
 // AMBIENT GENERATOR STARTUP
 // -------------------------
 
-s.reboot;
-
 s.waitForBoot {
 
-	// --- Mixing Bus ---
+	// --- Mixing & Global FX ---
 
-	~fxBus = Bus.audio(s, 2);
+	// 1) Bus for all instruments to feed into
+	~fxBus = ~fxBus ? Bus.audio(s, 2);
 
-	SynthDef(\globalFX, { |in=0, mix=0.3, room=0.9, damp=0.5|
-		var dry, wet, snd;
-		dry = In.ar(in, 2);
-		wet = FreeVerb.ar(dry, mix, room, damp);
-		snd = dry + wet;
-		Out.ar(0, snd);
+	// 2) Reverb synthdef
+	SynthDef(\globalFX, { |in=0, mix=0.5, room=0.9, damp=0.3|
+		var dry = In.ar(in, 2);
+		var wet = FreeVerb.ar(dry, mix, room, damp);
+		Out.ar(0, dry + wet);
 	}).add;
 	s.sync;
 
-	~fxSynth = Synth(\globalFX, [\in, ~fxBus]);
+	// 3) Fixed-order groups: sources FIRST, FX AFTER
+	~srcGroup = ~srcGroup ? Group.head(s);
+	~fxGroup  = ~fxGroup  ? Group.tail(s);
 
-	// Reverb settings
-	~fxSynth.set(\mix, 0.5);    // dry/wet mix (0.0 = dry, 1.0 = fully wet)
-	~fxSynth.set(\room, 0.9);   // room size (0.0 = small, 1.0 = big hall)
-	~fxSynth.set(\damp, 0.3);   // damping (0.0 = bright, 1.0 = muffled)
-
-
-	// --- FX utils ---
-	// Groupings
-	~srcGroup = Group.head(s);
-	~fxGroup  = Group.tail(s);
-
-	// (Re)create FX synth
+	// 4) (Re)create the FX synth inside the FX group (tail)
 	~restartFX = {
-		try { ~fxSynth.free } { }; // free old one if present
+		try { ~fxSynth.free } { };  // free old one if any
 		~fxSynth = Synth(\globalFX, [\in, ~fxBus], target: ~fxGroup, addAction: \addToTail);
 		~fxSynth.set(\mix, 0.5, \room, 0.9, \damp, 0.3);
 		"FX chain restarted.".postln;
 	};
 
-	// Ensure FX exists and is running
+	// 5) Ensure FX is alive (use this before playing if needed)
 	~ensureFX = {
-		if(~fxSynth.isNil or: { ~fxSynth.isRunning.not }) {
-			"~fxSynth was missing; restarting…".postln;
-			~restartFX.();
-		} {
-			"FX chain OK.".postln;
-		};
+		if(~fxSynth.isNil or: { ~fxSynth.isRunning.not }) { ~restartFX.() } { "FX chain OK.".postln };
 	};
 
-	// Install Cmd+. handler (defer so it runs after the stop)
+	// 6) Auto-respawn FX after Cmd+. (install once)
 	if(~fxCmdHookAdded != true) {
 		CmdPeriod.add({ { ~restartFX.() }.defer });
 		~fxCmdHookAdded = true;
 	};
 
-	// Make sure FX is up now
+	// 7) Start FX now
 	~restartFX.();
-
 
 
 	// --- Parameter Mapping Engine ---
@@ -72,133 +58,152 @@ s.waitForBoot {
 	rhythmicity from fluid/free to rhythmic/structured -> pulse emphasis
 	*/
 
-	// Input parameter
-	~parameters = IdentityDictionary[
-	    \warmth -> 0.5,
-	    \brightness -> 0.5,
-		\density -> 0.5,
-	    \variability -> 0.5,
-	    \rhythmicity -> 0.5
-	];
+	// 1) Init/ensure
+	~ensureParams = {
+		if(~parameters.isNil) {
+			~parameters = IdentityDictionary[
+				\warmth -> 0.5,
+				\brightness -> 0.5,
+				\density -> 0.5,
+				\variability -> 0.5,
+				\rhythmicity -> 0.5
+			];
+		};
+	};
+	~ensureParams.();
 
-	// Parameter mapping
-	~mapRange = { |val, inMin=0, inMax=1, outMin=0, outMax=1|
+	// 2) Mappers
+	~mapLin = { |val, inMin=0, inMax=1, outMin=0, outMax=1|
 		((val - inMin) / (inMax - inMin)) * (outMax - outMin) + outMin;
 	};
 
-	~parameterMappings = (
-		detune:       { ~mapRange.(~parameters[\warmth],      0, 1, 0.01, 1.0) },
-		filterCutoff: { ~mapRange.(~parameters[\brightness],  0, 1, 800, 8000) },
-		numVoices:    { ~mapRange.(~parameters[\density],     0, 1, 1, 8).round },
-		modSpeed:     { ~mapRange.(~parameters[\variability], 0, 1, 0.01, 2.0) },
-		pulseDiv:     { ~mapRange.(~parameters[\rhythmicity], 0, 1, 0.5, 4).round }
-	);
-
-	// Parameter check & limiter
-	~setParam = { |key, val|
-		if(~parameters.isNil) {
-	        "~parameters was nil; reinitializing.".warn;
-	        ~parameters = IdentityDictionary.new;
-	    };
-		~parameters[key] = val.clip(0.0, 1.0);
+	// expo mapping for things like cutoff; avoids “all the action at the top”
+	~mapExp = { |val, inMin=0, inMax=1, outMin=100, outMax=8000|
+		var t = ((val - inMin) / (inMax - inMin)).clip(0,1);
+		outMin * ((outMax/outMin) ** t)
 	};
 
-	// Mapping info
+	// 3) Mapped parameters (closures read current ~parameters)
+	~parameterMappings = (
+		detune:       { ~mapLin.(~parameters[\warmth],      0, 1, 0.01, 1.0) },
+		filterCutoff: { ~mapExp.(~parameters[\brightness],  0, 1, 200, 8000) },
+		numVoices:    { ~mapLin.(~parameters[\density],     0, 1, 3, 5).round.asInteger },
+		modSpeed:     { ~mapLin.(~parameters[\variability], 0, 1, 0.05, 1.5) },
+		pulseDiv:     { ~mapLin.(~parameters[\rhythmicity], 0, 1, 1, 4).round.asInteger }
+	);
+
+	// 4) Setters / getters
+	~setParam = { |key, val|
+		~ensureParams.();
+		~parameters[key] = val.clip(0, 1);
+	};
+
+	~setParams = { |pairs|  // e.g. ~setParams.( (warmth:0.8, brightness:0.3) );
+		pairs.keysValuesDo { |k, v| ~setParam.(k, v) };
+	};
+
+	~getParam   = { |key| ~parameters[key] };
+	~getMapped  = { |key| var f = ~parameterMappings[key]; f.notNil.if({ f.() }, { nil }) };
+
+	// 5) Inspectors
+	~showParams = {
+		"Params:".postln;
+		~parameters.keysValuesDo { |k,v| ("%: %".format(k, v)).postln };
+	};
+
 	~showMappedParams = {
 		"Mapped Parameter Values:".postln;
 		~parameterMappings.keysValuesDo { |key, func|
-			"%: %".format(key, func.()).postln;
+			("%: %".format(key, func.())).postln;
 		};
 	};
 
 
+	// --- Control Buses ---
+
+	~cutoffBus = ~cutoffBus ? Bus.control(s, 1);
+	~detuneBus = ~detuneBus ? Bus.control(s, 1);
+
+	~updatePadBuses = {
+		~cutoffBus.set(~parameterMappings[\filterCutoff].());
+		~detuneBus.set(~parameterMappings[\detune].());
+	};
+	~updatePadBuses.();  // initialize with current parameters
+
 
 	// --- Pad SynthDef ---
 
-	// Re‑evaluate this SynthDef
 	SynthDef(\padVoice, {
-		| out=0, freq=440, amp=0.3, detune=0.5, lforate=0.1, cutoff=3000, pan=0.0, gate=1, atk=3, rel=6 |
+		| out=0, freq=440, amp=0.25,
+		cutoffBus=0,     // ControlBus index (required; we always pass it)
+		detuneBus=0,     // ControlBus index (required)
+		pan=0.0, gate=1,
+		atk=3.0, rel=6.0,
+		driftHz=0.05,    // speed of cutoff random drift
+		driftAmt=500,    // ±Hz of cutoff drift around the bus value
+		rq=0.35,         // filter resonance
+		chorusMix=0.45   // 0..1, amount of micro-chorus
+		|
 
-		var freqs, snd, lfoAmp, lfoCutoff, env, pans;
+		var det, baseCf, cfMod, cfNow;
+		var freqs, voice, snd, env, pans, ampMod;
+		var d1, d2, chorL, chorR, dry;
 
-		freqs = [ freq, freq * (1 + detune * 0.01), freq * (1 - detune * 0.01) ];
-		pans  = [-0.2, 0, 0.2];
+		// Live controls
+		det    = In.kr(detuneBus, 1);         // expected ~0.01..1.0 (interpreted as percent)
+		baseCf = In.kr(cutoffBus, 1);         // e.g. 200..8000 Hz from mapping
 
-		snd = Mix.fill(3, { |i|
+		// Organic cutoff motion, smoothed
+		cfMod  = Lag.kr(LFNoise2.kr(driftHz).range(0 - driftAmt, driftAmt), 3.0);
+		cfNow  = (baseCf + cfMod).clip(200, 16000);
+
+		// Three detuned partials
+		freqs = [
+			freq,
+			freq * (1 + det * 0.01),
+			freq * (1 - det * 0.01)
+		];
+
+		// Gentle stereo offsets
+		pans  = [-0.25, 0, 0.25];
+
+		voice = Mix.fill(3, { |i|
 			var saw  = Saw.ar(freqs[i]);
 			var sine = SinOsc.ar(freqs[i], Rand(0, 2pi));
-			var mix  = XFade2.ar(saw, sine, -0.3);
+			var mix  = XFade2.ar(saw, sine, -0.25);  // mostly saw
 			Pan2.ar(mix, pans[i]);
 		});
 
-		lfoAmp    = SinOsc.kr(lforate, Rand(0, 2pi), 0.1, 0.9);
-		snd       = snd * lfoAmp;
+		// Subtle amplitude drift (non-periodic), smoothed
+		ampMod = Lag.kr(LFNoise2.kr(0.15).range(0.95, 1.0), 2.5);
 
-		lfoCutoff = SinOsc.kr(0.03, 0, 200, cutoff);
-		snd       = LPF.ar(snd, lfoCutoff);
+		// Filter
+		snd = RLPF.ar(voice, cfNow, rq);
 
-		// NOTE: ASR envelope with gate; we can close it with \gate, 0
-		env = EnvGen.kr(Env.asr(atk, 1, rel), gate, doneAction:2);
-		snd = snd * env * amp;
+		// ASR envelope
+		env = EnvGen.kr(Env.asr(atk, 1, rel), gate, doneAction: 2);
 
+		// Micro-chorus: two very short, slowly-wiggling delays
+		d1 = 0.006 + LFNoise2.kr(0.10).range(-0.003, 0.003);
+		d2 = 0.008 + LFNoise2.kr(0.07).range(-0.004, 0.004);
+		dry   = snd.sum;
+		chorL = DelayC.ar(dry, 0.02, d1);
+		chorR = DelayC.ar(dry, 0.02, d2);
+
+		// Blend chorus with original
+		snd = (snd * (1 - chorusMix)) + ([chorL, chorR] * chorusMix);
+
+		// Level, cleanup, pan
+		snd = snd * ampMod * env * amp;
+		snd = LeakDC.ar(snd);
+		snd = Limiter.ar(snd, 0.95);
+
+		snd = Balance2.ar(snd[0], snd[1], pan);
 		Out.ar(out, snd);
-	}).add; s.sync;
+	}).add;
+	s.sync;
 
-
-
-
-	// --- Pad Trigger Functions ---
-
-	~playPad = { |note=60, dur=10, pan=0.0|
-		var freq = note.midicps;
-		~ensureFX.();
-		Synth(\padVoice, [
-			\out, ~fxBus,
-			\freq, freq,
-			\amp, 0.2,
-			\detune, ~parameterMappings[\detune].(),
-			\cutoff, ~parameterMappings[\filterCutoff].(),
-			\lforate, ~parameterMappings[\modSpeed].(),
-			\pan, pan
-		]);
-	};
-
-	// Keep handles to running pads
-	~activePads = ~activePads ?? { List.new };
-
-	~playPad = { |note=60, pan=0.0|
-		var sy;
-		~ensureFX.();
-		sy = Synth(\padVoice, [
-			\out, ~fxBus,
-			\freq, note.midicps,
-			\amp, 0.2,
-			\detune, ~parameterMappings[\detune].(),
-			\cutoff, ~parameterMappings[\filterCutoff].(),
-			\lforate, ~parameterMappings[\modSpeed].(),
-			\pan, pan,
-			\atk, 2.5,   // gentle fade‑in
-			\rel, 5.0    // gentle fade‑out
-		], target: ~srcGroup, addAction: \addToHead);
-		~activePads.add(sy);
-		sy
-	};
-
-	// Array of Synths
-	~playPadChordSync = { |notes, panSpread = 0.6|
-		var n = notes.size, basePan = 0 - panSpread, step = (panSpread * 2) / (n - 1);
-		notes.collect { |note, i|
-			~playPad.(note, basePan + (i * step))
-		}
-	};
-
-
-	~restartFX = {
-    ~fxSynth = Synth(\globalFX, [\in, ~fxBus]);
-    ~fxSynth.set(\mix, 0.5, \room, 0.9, \damp, 0.3);
-    "FX chain restarted.".postln;
-	};
-
+	// Done and give feedback
 	"Ambient system ready. Try: ~showMappedParams.();  ~playPadChord.([57,60,65,69], 0.8, 0.5);".postln;
 };
 )
@@ -296,91 +301,186 @@ s.waitForBoot {
     7: [[1,0.70],[3,0.30]]
 );
 
+~currentDegree = ~currentDegree ? 1;
+
 ~nextDegree = { |cur|
-    var pairs = ~degreeMarkov[cur] ? [[1,1.0]];
+    var pairs = ~degreeMarkov[cur] ? [[1, 1.0]];
     var total = pairs.sum { |p| p[1] };
     var r = total.rand, acc = 0.0;
     pairs.do { |p|
         acc = acc + p[1];
-        if(r < acc) { ^p[0] };
+        if (r < acc) {
+            ("Next degree: " ++ p[0]).postln; // <-- print each step
+            ^p[0];
+        };
     };
-    pairs.last[0] // fallback
+    pairs.last[0]
 };
 
 // --- Parameter-to-music mappings ---
-~chordHoldBeats = {~mapRange.(~parameters[\rhythmicity] ? 0.5, 0, 1, 6.0, 1.5)}; // rhythmicity: 0 (floaty) --> 6 beats, 1 (rhythmic) --> 1.5 beats
 
-~chordSize = {(~mapRange.(~parameters[\density] ? 0.5, 0, 1, 3, 5).round.clip(3, 5).asInteger)}; // density: 0..1 --> 3..5 notes
+// chord duration in beats from rhythmicity (0 --> 6 beats, 1 --> 1.5 beats)
+~chordHoldBeats = {
+    var v = ~parameters[\rhythmicity] ? 0.5;
+    (~mapLin.(v, 0, 1, 6.0, 1.5)).max(0.1)
+};
 
-~invAmount = {(~mapRange.(~parameters[\variability] ? 0.5, 0, 1, 0, 3).round.asInteger)}; // variability controls inversion amount (0..3)
+// chord size 3..5 (integer) from density
+~chordSize = {
+    var v = ~parameters[\density] ? 0.5;
+    var r = ~mapLin.(v, 0, 1, 3, 5);
+    (r.round.asInteger).clip(3, 5)
+};
 
-~add9Prob = {~mapRange.(~parameters[\variability] ? 0.5, 0, 1, 0.0, 0.6)}; // variability controls chance of 9th added
+// inversion amount 0..3 (integer) from variability
+~invAmount = {
+    var v = ~parameters[\variability] ? 0.5;
+    var r = ~mapLin.(v, 0, 1, 0, 3);
+    (r.round.asInteger).clip(0, 3)
+};
 
-~targetCenter = {(60 + ~mapRange.(~parameters[\brightness] ? 0.5, 0, 1, -12, 12)).round}; // brightness lifts register (C3..C5 approx)
+// probability of adding the 9th (0..0.6) from variability
+~add9Prob = {
+    var v = ~parameters[\variability] ? 0.5;
+    ~mapLin.(v, 0, 1, 0.0, 0.6)
+};
 
-~targetSpread = {(16 + ~mapRange.(~parameters[\warmth] ? 0.5, 0, 1, 0, 14)).round}; // warmth widens spread (16..30 semitones)
+// register center (MIDI) from brightness (C3..C5 ≈ 48..72)
+~targetCenter = {
+    var v = ~parameters[\brightness] ? 0.5;
+    var r = ~mapLin.(v, 0, 1, 48, 72);
+    r.round
+};
 
-// --- Chord engine control (clock scheduler, no Routines/Tasks) ---
+// spread (± around center) from warmth (16..30 semitones)
+~targetSpread = {
+    var v = ~parameters[\warmth] ? 0.5;
+    var r = ~mapLin.(v, 0, 1, 16, 30);
+    r.round
+};
 
-~chordClock = ~chordClock ? TempoClock.default;
-~chordEngineOn = ~chordEngineOn ? false;
-~lastChordSynths = ~lastChordSynths ?? { Array.newClear(0) };
+// Utility: build the next voiced chord (returns an Array of midinotes)
+~nextVoicedChord = {
+    var deg    = ~currentDegree ? 1;
+    var size   = ~chordSize.().asInteger.clip(3, 5);
+    var inv    = ~invAmount.().asInteger.clip(0, 3);
+    var center = ~targetCenter.();
+    var spread = ~targetSpread.();
 
-// One step; schedules the next
-~chordStep = { |clock|
-    var deg, size, inv, center, spread, hold, chord, synths;
+    var chord  = ~chordFromDegree.(deg, size, ~add9Prob.(), 4);
+    chord      = ~invert.(chord, inv);
+    chord      = ~voiceSpread.(chord, center, spread);
 
-    if(~chordEngineOn.not) { ^nil };
-
-    deg    = ~currentDegree ? 1;
-    size   = ~chordSize.().asInteger.clip(3, 5);
-    inv    = ~invAmount.().asInteger.clip(0, 3);
-    center = ~targetCenter.();
-    spread = ~targetSpread.();
-    hold   = (~chordHoldBeats.()).max(0.05);
-
-    chord  = ~chordFromDegree.(deg, size, ~add9Prob.(), 4);
-    chord  = ~invert.(chord, inv);
-    chord  = ~voiceSpread.(chord, center, spread);
-
-    // 1) spawn & keep handles
-    synths = ~playPadChordSync.(chord, 0.7);
-    ~lastChordSynths = synths;
-
-    // 2) schedule this chord's release
-    clock.sched(hold, {
-        synths.do { |sy| if(sy.notNil and: { sy.isRunning }) { sy.set(\gate, 0) } };
-        nil
-    });
-
-    // 3) move to next degree and schedule next step
+    // advance degree for next event
     ~currentDegree = ~nextDegree.(deg);
-    clock.sched(hold, { ~chordStep.(clock); nil });
 
-    nil
+    chord  // array of MIDI notes
 };
 
-~startChordEngine = {
+// A safe “ensure FX + group” function for patterns
+~ensureAudioInfra = {
     ~ensureFX.();
-    if(~chordEngineOn) { "Chord engine already running; ignoring.".postln; ^nil };
-    ~chordEngineOn = true;
-    ~chordStep.(~chordClock);
-    "Chord engine started.".postln;
+    ~srcGroup = ~srcGroup ?? { Group.head(s) };
+    ~fxGroup  = ~fxGroup  ?? { Group.tail(s) };
 };
 
-~stopChordEngine = {
-    ~chordEngineOn = false;
-    // fade whatever is currently playing
-    (~lastChordSynths ? []).do { |sy| if(sy.notNil and: { sy.isRunning }) { sy.set(\gate, 0) } };
-    "Chord engine stopped (fading current chord).".postln;
+// Pattern: one event per chord; Event system expands arrays into multiple notes
+~ensureAudioInfra.();
+
+// chord duration in beats: rhythmicity 0 → long (6), 1 → short (1.5)
+~chordHoldBeats = {
+	~ensureParams.();
+	~mapLin.( ~parameters[\rhythmicity] ? 0.5, 0, 1, 6.0, 1.5 )
+};
+
+Pdef(\pad,
+    Pbind(
+        \instrument, \padVoice,
+        \group,      Pfunc { ~srcGroup },  // ensure pad notes go to source group
+        \out,        Pfunc { ~fxBus },     // route into global FX
+        \atk,        2.5,                  // synth-side fade in
+        \rel,        5.0,                  // synth-side fade out
+        \amp,        0.20,
+
+        // duration in beats per chord (from rhythmicity)
+        \dur, Pfunc { ( ~chordHoldBeats ? { 2.0 } ).value.max(0.1) },
+
+        // build voiced chord each event; Event will spawn parallel notes for arrays
+        \midinote,   Pfunc { ~nextVoicedChord.() },
+
+        // a touch of stereo spread per note (optional)
+        \pan,        Pwhite(-0.3, 0.3),
+
+        // make sure gate releases occur (Event uses sustain=dur*legato; we keep legato ~1)
+        \legato,     1.0
+    )
+);
+)
+
+
+// --- Checks ---
+
+s.meter;
+s.scope;
+s.notetree;
+~chordHoldBeats.().postln;  // should print a number, e.g. 3.75
+~parameters.postln;         // not nil
+~mapLin.postln;             // a Function
+~chordSize.postln;
+~invAmount.postln;
+~targetCenter.postln;
+~targetSpread.postln;
+~add9Prob.postln;
+~chordHoldBeats.postln;
+~ensureFX.();
+~fxSynth.isRunning.postln;
+~nextVoicedChord.().postln;
+
+
+(
+// Create (or reuse) the control buses
+~cutoffBus = ~cutoffBus ? Bus.control(s, 1);
+~detuneBus = ~detuneBus ? Bus.control(s, 1);
+
+// Updater: push mapped values to the buses
+~updatePadBuses = {
+	var cutoff = (~parameterMappings[\filterCutoff] ? { ~mapExp.(~parameters[\brightness] ? 0.5, 0,1, 200,8000) }).value;
+	var detune = (~parameterMappings[\detune]       ? { ~mapLin.(~parameters[\warmth]     ? 0.5, 0,1, 0.01,1.0) }).value;
+	~cutoffBus.set(cutoff);
+	~detuneBus.set(detune);
 };
 )
 
-// --- Checks ---
-~parameters.postln;    // should NOT be nil
-~fxBus.postln;         // should be a Bus
-~fxSynth.isRunning.postln; // often true; at least ~fxSynth is a Synth
+(
+// Quick status
+~status = {
+    "---- STATUS ----".postln;
+    ("params   : " ++ (~parameters ? nil)).postln;
+    ("fxBus    : " ++ (~fxBus ? nil)).postln;
+    ("fxSynth  : " ++ (if(~fxSynth.notNil, { ~fxSynth.isRunning }, { nil }))).postln;
+    ("scalePcs : " ++ (~scalePcs ? nil)).postln;
+    ("keyMidi  : " ++ (~keyMidi ? nil)).postln;
+    nil
+};
 
+// Panic (stop patterns + fade current nodes via CmdPeriod)
+~panic = {
+    Pdef.all.do(_.stop);
+    CmdPeriod.run;
+    "Panic: patterns stopped, server nodes halted.".postln;
+};
+)
+
+(
+~updatePadBuses.();  // push cutoff/detune to buses
+Synth(\padVoice, [
+    \out,       ~fxBus,
+    \cutoffBus, ~cutoffBus.index,
+    \detuneBus, ~detuneBus.index,
+    \freq,      220,
+    \atk, 0.5, \rel, 2.0, \amp, 0.2
+]);
+)
 
 // --- Usage ---
 ~setParam.(\warmth, 0.8);
@@ -388,8 +488,33 @@ s.waitForBoot {
 ~setKey.(\D, 3);
 ~setScale.(\dorian);
 ~showMappedParams.();
-~fxSynth.set(\mix, 0.3, \room, 0.95, \damp, 0.2);
+~fxSynth.set(\mix, 0.9, \room, 0.95, \damp, 0.2);
+~fxSynth = Synth(\globalFX, [\in, ~fxBus]);
+~fxSynth.isRunning.postln; // sollte nun true sein!
 ~playPadChord.([57, 60, 65, 69], 0.8, 0.5); // Play a pad chord
 ~restartFX.(); // Manuel restart to be able to play again after cmd + . incase the automatic restart did not work
-~startChordEngine.();
-~stopChordEngine.();
+~updatePadBuses.(); // make sure buses reflect current params
+~status.();
+~panic.();
+
+// Start / stop
+Pdef(\pad).play(TempoClock.default);
+Pdef(\pad).stop;
+
+// Change the feel while it runs (affects *next* chord)
+~setParam.(\density, 0.9);      // 3 → 5 notes
+~setParam.(\variability, 0.6);  // more inversions/9ths
+~setParam.(\brightness, 0.7);   // higher register
+~setParam.(\warmth, 0.8);       // wider spread
+~setParam.(\rhythmicity, 0.5);  // shorter holds = faster changes
+
+// Set buses
+~cutoffBus.set(5000);
+~detuneBus.set(0.1);
+
+// Key / scale changes (take effect on next chord)
+~setKey.(\D, 3);
+~setScale.(\dorian);
+
+// Tempo
+TempoClock.default.tempo = 80/60; // 80 BPM
