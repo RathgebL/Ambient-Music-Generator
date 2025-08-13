@@ -8,46 +8,71 @@ s.reboot;
 
 s.waitForBoot {
 
-	// --- Mixing & Global FX ---
+    // 1) Global FX Bus
+    ~fxBus = ~fxBus ? Bus.audio(s, 2);
 
-	// 1) Bus for all instruments to feed into
-	~fxBus = ~fxBus ? Bus.audio(s, 2);
+    // 2) Reverb SynthDef
+    SynthDef(\globalFX, { |in=0, mix=0.5, room=0.9, damp=0.3|
+        var dry = In.ar(in, 2);
+        var wet = FreeVerb.ar(dry, mix, room, damp);
+        Out.ar(0, dry + wet);
+    }).add;
+    s.sync;
 
-	// 2) Reverb synthdef
-	SynthDef(\globalFX, { |in=0, mix=0.5, room=0.9, damp=0.3|
-		var dry = In.ar(in, 2);
-		var wet = FreeVerb.ar(dry, mix, room, damp);
-		Out.ar(0, dry + wet);
-	}).add;
-	s.sync;
+    // 3) Ensure groups exist *and are alive on the server*
+    ~ensureGroups = {
+        if(~srcGroup.isNil or: { ~srcGroup.isRunning.not }) {
+            ~srcGroup = Group.head(s);
+        };
+        if(~fxGroup.isNil or: { ~fxGroup.isRunning.not }) {
+            // place FX group *after* sources to guarantee order: sources -> fx -> out
+            ~fxGroup = Group.after(~srcGroup);
+        };
+    };
 
-	// 3) Fixed-order groups: sources FIRST, FX AFTER
-	~srcGroup = ~srcGroup ? Group.head(s);
-	~fxGroup  = ~fxGroup  ? Group.tail(s);
+    // 4) (Re)create the FX synth inside the FX group (tail)
+    ~restartFX = {
+        ~ensureGroups.();
 
-	// 4) (Re)create the FX synth inside the FX group (tail)
-	~restartFX = {
-		try { ~fxSynth.free } { };  // free old one if any
-		~fxSynth = Synth(\globalFX, [\in, ~fxBus], target: ~fxGroup, addAction: \addToTail);
-		~fxSynth.set(\mix, 0.5, \room, 0.9, \damp, 0.3);
-		"FX chain restarted.".postln;
-	};
+        // Try to free old FX synth if it exists; ignore if already gone
+        try { if(~fxSynth.notNil) { ~fxSynth.free } } { };
 
-	// 5) Ensure FX is alive (use this before playing if needed)
-	~ensureFX = {
-		if(~fxSynth.isNil or: { ~fxSynth.isRunning.not }) { ~restartFX.() } { "FX chain OK.".postln };
-	};
+        // Create new FX synth targeted to the (fresh) fx group
+        ~fxSynth = Synth(\globalFX, [
+            \in, ~fxBus.index  // explicit bus index is safest
+        ], target: ~fxGroup, addAction: \addToTail);
 
-	// 6) Auto-respawn FX after Cmd+. (install once)
-	if(~fxCmdHookAdded != true) {
-		CmdPeriod.add({ { ~restartFX.() }.defer });
-		~fxCmdHookAdded = true;
-	};
+        // Set default params
+        ~fxSynth.set(\mix, 0.5, \room, 0.9, \damp, 0.3);
 
-	// 7) Start FX now
-	~restartFX.();
+        ("FX chain restarted. srcGroup:" ++ ~srcGroup.nodeID
+            ++ " fxGroup:" ++ ~fxGroup.nodeID
+            ++ " fxSynth:" ++ ~fxSynth.nodeID).postln;
+    };
 
+    // 5) Ensure FX is alive (use before playing)
+    ~ensureFX = {
+        ~ensureGroups.();
+        if(~fxSynth.isNil or: { ~fxSynth.isRunning.not }) {
+            ~restartFX.();
+        } {
+            "FX chain OK.".postln;
+        };
+    };
 
+    // 6) Auto-respawn after Cmd+. (install once)
+    if(~fxCmdHookAdded != true) {
+        CmdPeriod.add({
+            // defer to AppClock so it runs after server flush
+            { ~restartFX.() }.defer;
+        });
+        ~fxCmdHookAdded = true;
+    };
+
+    // 7) Start FX now
+    ~restartFX.();
+
+	
 	// --- Parameter Mapping Engine ---
 
 	/*
