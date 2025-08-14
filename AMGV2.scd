@@ -34,18 +34,39 @@ rhythmicity from fluid/free to rhythmic/structured -> pulse emphasis
 };
 
 ~parameterMappings = (
-	detune:       { ~mapLin.(~parameters[\warmth],          0, 1, 0.01, 1.0) },
-	filterCutoff: { ~mapExp.(~parameters[\brightness],      0, 1, 200, 10000) },
-	modSpeed:     { ~mapLin.(1 - ~parameters[\variability], 0, 1, 0.05, 1.5) },
-	dur:          { ~mapLin.(1 - ~parameters[\variability], 0, 1, 1, 12)},
-	pulseDiv:     { ~mapLin.(~parameters[\rhythmicity],     0, 1, 1, 4).round.asInteger },
-	atk:          { ~mapLin.(1 - ~parameters[\rhythmicity], 0, 1, 0.5, 4.0) }, // 0.5–6 sec
-    rel:          { ~mapLin.(1 - ~parameters[\rhythmicity], 0, 1, 1.0, 8.0) }, // 1–8 sec
+	detune:       { ~mapLin.(~parameters[\warmth],      0, 1, 0.0, 0.1) },
+	modDepth:     { ~mapLin.(~parameters[\warmth],      0, 1, 1, 250) },
+	filterCutoff: { ~mapExp.(~parameters[\brightness],  0, 1, 1000, 10000) },
+	rq:           { ~mapLin.(~parameters[\brightness],  0, 1, 0.9, 0.1)},
+	dur:          { ~mapLin.(~parameters[\variability], 0, 1, 16, 4)},
+	pulseDiv:     { ~mapLin.(~parameters[\rhythmicity], 0, 1, 1, 4).round.asInteger },
+	atk:          { ~mapLin.(~parameters[\rhythmicity], 0, 1, 4, 0.5) },
+    rel:          { ~mapLin.(~parameters[\rhythmicity], 0, 1, 8.0, 1.0) },
 	numVoices:    {
 		var raw =   ~mapLin.(~parameters[\density],         0, 1, 1, 9).round.asInteger;
 		if(raw.even) { raw = raw + 1 }; // ensure odd
 		raw
-	}
+	},
+	modRate: {
+		var v = ~parameters[\variability];
+		var r = ~parameters[\rhythmicity];
+		var tempo = TempoClock.default.tempo; // beats per second
+
+		// Average the two controls
+		var controlVal = (v + r) / 2;
+
+		// Beat divisions in beats (not seconds)
+		// whole (4), half (2), dotted quarter (1.5), quarter (1), dotted eighth (0.75), eighth (0.5), sixteenth (0.25)
+		var divisions = [4, 2, 1.5, 1, 0.75, 0.5, 0.25];
+		var idx = (controlVal * (divisions.size - 1)).round.clip(0, divisions.size - 1);
+		var chosenDivision = divisions[idx];
+
+		// Convert beats to frequency (Hz)
+		var freq = 1 / chosenDivision * tempo;
+
+		freq
+	},
+
 );
 
 ~setParam = { |key, val|
@@ -75,14 +96,14 @@ rhythmicity from fluid/free to rhythmic/structured -> pulse emphasis
 
 // --- Pad Synth ---
 (
-SynthDef(\padSynth, { |freq = 440, amp = 0.2, gate = 1, pan = 0, atk = 2.0, rel = 4.0, ffreq = 1000, rq = 0.2, modRate = 0.1|
+SynthDef(\padSynth, { |freq = 440, amp = 0.2, gate = 1, pan = 0, atk = 2.0, rel = 4.0, ffreq = 100, rq = 0.2, modRate = 1, modDepth = 100|
     var osc, env, filt, mod;
 
     // Saw per voice (SC will expand multiple voices automatically)
     osc = Saw.ar(freq) * 0.3;
 
     // Filter modulation
-    mod = SinOsc.kr(modRate, 0, 500, ffreq);
+    mod = SinOsc.kr(modRate, 0, modDepth, ffreq);
     filt = RLPF.ar(osc, mod, rq);
 
     // Envelope
@@ -260,7 +281,7 @@ Pdef(\pad,
         \amp, 0.3,
 
         // Variability -> modRate
-        \modRate, Pfunc({ ~getMapped.(\modSpeed) }),
+        \modRate, Pfunc({ ~getMapped.(\modRate) }),
 
         // Brightness -> filter cutoff
         \ffreq, Pfunc({ ~getMapped.(\filterCutoff) }),
@@ -312,19 +333,19 @@ x = Synth(\padSynth, [\freq, [440, 550, 660], \amp, 0.3]);
 ~nextChord.().midicps.postln;
 
 // Warmth: 0 (cold/thin) → 1 (warm/fat)
-~setParam.(\warmth, 0.3);
+~setParam.(\warmth, 0.5);
 
 // Brightness: 0 (dark/muffled) → 1 (bright/open)
-~setParam.(\brightness, 0.1);
+~setParam.(\brightness, 0.3);
 
 // Density: 0 (few voices) → 1 (many voices)
 ~setParam.(\density, 0.5);
 
 // Variability: 0 (slow/static) → 1 (fast/changing)
-~setParam.(\variability, 0.2);
+~setParam.(\variability, 0.3);
 
 // Rhythmicity: 0 (smooth/legato) → 1 (tight/rhythmic)
-~setParam.(\rhythmicity, 0.4);
+~setParam.(\rhythmicity, 0.9);
 
 ~parameters.postln;
 
