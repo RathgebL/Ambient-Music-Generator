@@ -40,9 +40,12 @@ rhythmicity from fluid/free to rhythmic/structured -> pulse emphasis
 	rq:           { ~mapLin.(~parameters[\brightness],  0, 1, 0.9, 0.1)},
 	dur:          { ~mapLin.(~parameters[\variability], 0, 1, 16, 4)},
 	pulseDiv:     { ~mapLin.(~parameters[\rhythmicity], 0, 1, 1, 4).round.asInteger },
-	atk:          { ~mapLin.(~parameters[\rhythmicity], 0, 1, 4, 0.5) },
+	sub:          { ~mapLin.(~parameters[\density], 0, 1, 0.5, 1.0) },
+    drive:        { ~mapLin.(~parameters[\warmth],  0, 1, 0.05, 0.5) },
+	atk:          { ~mapLin.(~parameters[\rhythmicity], 0, 1, 4.0, 0.5) },
     rel:          { ~mapLin.(~parameters[\rhythmicity], 0, 1, 8.0, 1.0) },
-	norm:         { ~mapLin.(~parameters[\density],     0, 1, 0.4, 0.1) },
+	legato:       { ~mapLin.(~parameters[\rhythmicity], 0, 1, 1.05, 0.95) },
+	norm:         { ~mapLin.(~parameters[\density],     0, 1, 0.2, 0.1) },
 	numVoices:    {
 		var raw =   ~mapLin.(~parameters[\density],         0, 1, 1, 9).round.asInteger;
 		if(raw.even) { raw = raw + 1 }; // ensure odd
@@ -103,6 +106,35 @@ SynthDef(\padSynth, { |freq = 440, amp = 0.2, gate = 1, pan = 0, atk = 2.0, rel 
     // Envelope
     env = EnvGen.kr(Env.asr(atk, 1, rel), gate, doneAction: 2);
 
+    Out.ar(0, Pan2.ar(filt * env * amp, pan));
+}).add;
+)
+
+
+// --- Bass Synth ---
+(
+SynthDef(\bassSynth, {
+    |freq = 60, amp = 0.3, gate = 1, pan = 0, atk = 0.01, rel = 0.4,
+     ffreq = 200, rq = 0.3, subOct = 0.5, drive = 0.2|
+
+    var osc, sub, mix, filt, env;
+
+    // Main osc: pulse wave for bass body
+    osc = Pulse.ar(freq, 0.45, 0.8); // slightly narrow pulse for warmth
+
+    // Sub osc: one octave below
+    sub = SinOsc.ar(freq / 2, 0, subOct); // smooth low reinforcement
+
+    // Mix and drive
+    mix = (osc + sub).tanh * (1 + drive);
+
+    // Filter for roundness
+    filt = RLPF.ar(mix, ffreq, rq);
+
+    // Envelope for shape
+    env = EnvGen.kr(Env.asr(atk, 1, rel), gate, doneAction: 2);
+
+    // Output
     Out.ar(0, Pan2.ar(filt * env * amp, pan));
 }).add;
 )
@@ -240,65 +272,76 @@ SynthDef(\padSynth, { |freq = 440, amp = 0.2, gate = 1, pan = 0, atk = 2.0, rel 
 
 // --- Pdef with probabilistic chord selection ---
 (
-Pdef(\pad,
-    Pbind(
-        \instrument, \padSynth,
+Pdef(\padAndBass,
+    Ppar([
+        Pbind(
+            \instrument, \padSynth,
 
-        // Rhythm: rhythmicity influences dur choices
-		\dur, Pfunc({ ~getMapped.(\dur) }),
+            // Rhythm: rhythmicity influences dur choices
+            \dur, Pfunc({ ~getMapped.(\dur) }),
+			\legato, Pfunc({ ~getMapped.(\legato) }),
+            // Chords
+            \freq, Pfunc({
+                var chord, freqs, detune, n, voices;
 
+                chord = ~nextChord.();
+                freqs = chord.midicps;
+                detune = ~getMapped.(\detune);
+                n = ~getMapped.(\numVoices);
 
-        // Chords
-		\freq, Pfunc({
-			var chord, freqs, detune, n, voices;
+                // Detune voices
+                voices = Array.fill(n, { |i|
+                    freqs + (detune * (i - (n-1)/2))
+                }).flat;
 
-			chord = ~nextChord.();
-			freqs = chord.midicps;
-			detune = ~getMapped.(\detune);
-			n = ~getMapped.(\numVoices);
+                // Add octave up layer if many voices
+                if(n > 5) {
+                    voices = voices ++ ((voices * 2) * 0.5); // octave up at half volume
+                };
 
-			// Detune voices
-			voices = Array.fill(n, { |i|
-				freqs + (detune * (i - (n-1)/2))
-			}).flat;
+                voices
+            }),
 
+            \pan, Pfunc({
+                var n = ~getMapped.(\numVoices);
+                Array.fill(n, { |i|
+                    (i / (n - 1)) * 2 - 1 // evenly spread between -1 and 1
+                }).flat
+            }),
 
-			// Add octave up/down layers if many voices
-			if(n > 5) {
-				voices = voices
-				++ ((voices * 2) * 0.5)   // octave up at half volume
-			};
+            // Variability -> modRate
+            \modRate, Pfunc({ ~getMapped.(\modRate) }),
 
+            // Brightness -> filter cutoff
+            \ffreq, Pfunc({ ~getMapped.(\filterCutoff) }),
 
-			// Debug
-			("[Pbind DEBUG] numVoices: " ++ n).postln;
-			("[Pbind DEBUG] final freqs: " ++ voices).postln;
+            \atk, Pfunc({ ~getMapped.(\atk) }),
+            \rel, Pfunc({ ~getMapped.(\rel) }),
+            \rq,  Pfunc({ ~getMapped.(\rq) }),
+			\amp, 0.2,
+        ),
 
-			voices
-		}),
+        Pbind(
+            \instrument, \bassSynth,
+            \dur, Pfunc({ ~getMapped.(\dur) }),
+			\legato, Pfunc({ ~getMapped.(\legato) - 0.05 }),
+            \freq, Pfunc({
+                var chord;
+				chord = ~nextChord.();
+                (chord[0] - 24).midicps // root note of chord - 2 octaves
 
-
-		\pan, Pfunc({
-			var n = ~getMapped.(\numVoices);
-			Array.fill(n, { |i|
-				(i / (n - 1)) * 2 - 1 // evenly spread between -1 and 1
-			}).flat
-		}),
-
-        \amp, 0.3,
-
-        // Variability -> modRate
-        \modRate, Pfunc({ ~getMapped.(\modRate) }),
-
-        // Brightness -> filter cutoff
-        \ffreq, Pfunc({ ~getMapped.(\filterCutoff) }),
-
-        \atk, Pfunc({ ~getMapped.(\atk) }),
-        \rel, Pfunc({ ~getMapped.(\rel) }),
-        \rq, 0.3,
-    )
-).play;
+            }),
+            \ffreq, Pfunc({ ~getMapped.(\filterCutoff) }),
+            \rq, Pfunc({ ~getMapped.(\rq) }),
+            \subOct, Pfunc({ ~getMapped.(\sub) }),
+            \drive, Pfunc({ ~getMapped.(\drive) }),
+            \amp, 0.2
+        )
+    ])
+);
 )
+
+Pdef(\padAndBass).play;
 
 
 // --- Routine to change scales ---
@@ -339,19 +382,19 @@ x = Synth(\padSynth, [\freq, [440, 550, 660], \amp, 0.3]);
 ~nextChord.().midicps.postln;
 
 // Warmth: 0 (cold/thin) → 1 (warm/fat)
-~setParam.(\warmth, 0.5);
+~setParam.(\warmth, 0.7);
 
 // Brightness: 0 (dark/muffled) → 1 (bright/open)
-~setParam.(\brightness, 0.3);
+~setParam.(\brightness, 0.2);
 
 // Density: 0 (few voices) → 1 (many voices)
-~setParam.(\density, 0.6);
+~setParam.(\density, 0.7);
 
 // Variability: 0 (slow/static) → 1 (fast/changing)
-~setParam.(\variability, 0.7);
+~setParam.(\variability, 0.6);
 
 // Rhythmicity: 0 (smooth/legato) → 1 (tight/rhythmic)
-~setParam.(\rhythmicity, 0.9);
+~setParam.(\rhythmicity, 0.2);
 
 ~parameters.postln;
 
