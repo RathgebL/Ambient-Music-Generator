@@ -42,7 +42,7 @@ rhythmicity from fluid/free to rhythmic/structured -> pulse emphasis
 	filterCutoff: { ~mapExp.(~parameters[\brightness],  0, 1, 1000, 10000) },
 	rq:           { ~mapLin.(~parameters[\brightness],  0, 1, 0.9, 0.1)},
 	dur:          { ~mapLin.(~parameters[\variability], 0, 1, 16, 4)},
-	revMix:    { ~mapLin.(~parameters[\variability], 0, 1, 0.3, 0.6) },
+	revMix:       { ~mapLin.(~parameters[\variability], 0, 1, 0.3, 0.6) },
 	pulseDiv:     { ~mapLin.(~parameters[\rhythmicity], 0, 1, 1, 4).round.asInteger },
 	atk:          { ~mapExp.(1 - ~parameters[\rhythmicity], 0, 1, 0.5, 3) },
     rel:          { ~mapLin.(~parameters[\rhythmicity], 0, 1, 4, 1.0) },
@@ -225,6 +225,10 @@ SynthDef(\textureSynth, { |amp = 0.1, gate = 1, ffreq = 1000, rq = 0.3, modRate 
 
 // Voice leading
 ~voiceLeadChord = { |newChord, lastChord|
+	var maxLeap = ~mapLin.(~parameters[\variability], 0, 1, 4, 6).round.asInteger;
+
+	// ("[VoiceLead DEBUG] maxLeap: " ++ maxLeap).postln;
+
     if(lastChord.isNil) {
         // First chord: just return it
         newChord
@@ -234,8 +238,8 @@ SynthDef(\textureSynth, { |amp = 0.1, gate = 1, ffreq = 1000, rq = 0.3, modRate 
             var lastNote = lastChord.wrapAt(i);
 
             // shift up or down octaves until closest to lastNote
-            while { target - lastNote > 6 } { target = target - 12 };
-            while { lastNote - target > 6 } { target = target + 12 };
+            while { target - lastNote > maxLeap } { target = target - 12 };
+            while { lastNote - target > maxLeap } { target = target + 12 };
 
             target
         }
@@ -277,10 +281,48 @@ SynthDef(\textureSynth, { |amp = 0.1, gate = 1, ffreq = 1000, rq = 0.3, modRate 
     chord
 };
 
+// Build a chord with voice leading
 ~chordFromDegreeWeightedVL = { |degree, size=4|
     var chord = ~chordFromDegreeWeighted.(degree, size);
     chord = ~voiceLeadChord.(chord, ~lastChord);
     ~lastChord = chord; // store for next time
+    chord
+};
+
+// Suspensions & omissions helper
+~applySuspensions = { |chord|
+	var probSus   = ~mapLin.(~parameters[\variability], 0, 1, 0.05, 0.4);
+	var probOmit5 = ~mapLin.(~parameters[\variability], 0, 1, 0.05, 0.25);
+
+
+    // Apply suspension (replace 3rd with 2nd or 4th)
+    if(probSus.coin) {
+        var idx3 = chord.detectIndex { |n|
+            ((n % 12) == 4) or: { (n % 12) == 3 } // major or minor 3rd
+        };
+        if(idx3.notNil) {
+            if(0.5.coin) {
+                chord[idx3] = chord[idx3] - 2; // sus2
+            } {
+                chord[idx3] = chord[idx3] + 1; // sus4
+            };
+        };
+    };
+
+    // Drop 5th for openness
+    if(probOmit5.coin) {
+        chord = chord.reject { |n| (n % 12) == 7 };
+    };
+
+    chord
+};
+
+// Build the final chord
+~chordFromDegreeWeightedVLsus = { |degree, size=4|
+    var chord = ~chordFromDegreeWeighted.(degree, size);
+    chord = ~voiceLeadChord.(chord, ~lastChord);
+    chord = ~applySuspensions.(chord); // NEW STEP
+    ~lastChord = chord; // store for next step
     chord
 };
 
@@ -391,7 +433,7 @@ SynthDef(\textureSynth, { |amp = 0.1, gate = 1, ffreq = 1000, rq = 0.3, modRate 
     deg = ~nextDegree2.(~currentDegree);
     ~currentDegree = deg;
 
-    chord = ~chordFromDegreeWeightedVL.(deg, 4, 0.3);
+    chord = ~chordFromDegreeWeightedVLsus.(deg, 4, 0.3);
     chord = ~voiceSpread.(chord, 60, 24);
     chord = ~invert.(chord, rrand(0, 2));  // Random inversion
 
@@ -438,7 +480,7 @@ Pdef(\ambgen,
 					voices = voices ++ extra;
 				};
 
-				("[PAD DEBUG] voices count: " ++ voices.size).postln;
+				// ("[PAD DEBUG] voices count: " ++ voices.size).postln;
 
                 voices
             }),
@@ -556,7 +598,7 @@ x = Synth(\padSynth, [\freq, [440, 550, 660], \amp, 0.3]);
 ~setParam.(\density, 0.7);
 
 // Variability: 0 (slow/static) → 1 (fast/changing)
-~setParam.(\variability, 0.6);
+~setParam.(\variability, 0.8);
 
 // Rhythmicity: 0 (smooth/legato) → 1 (tight/rhythmic)
 ~setParam.(\rhythmicity, 0.4);
