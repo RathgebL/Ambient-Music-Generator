@@ -44,8 +44,8 @@ rhythmicity from fluid/free to rhythmic/structured -> pulse emphasis
 	dur:          { ~mapLin.(~parameters[\variability], 0, 1, 16, 4)},
 	revMix:    { ~mapLin.(~parameters[\variability], 0, 1, 0.3, 0.6) },
 	pulseDiv:     { ~mapLin.(~parameters[\rhythmicity], 0, 1, 1, 4).round.asInteger },
-	atk:          { ~mapLin.(~parameters[\rhythmicity], 0, 1, 4.0, 0.5) },
-    rel:          { ~mapLin.(~parameters[\rhythmicity], 0, 1, 8.0, 1.0) },
+	atk:          { ~mapExp.(1 - ~parameters[\rhythmicity], 0, 1, 0.5, 3) },
+    rel:          { ~mapLin.(~parameters[\rhythmicity], 0, 1, 4, 1.0) },
 	legato:       { ~mapLin.(~parameters[\rhythmicity], 0, 1, 1.05, 0.95) },
 	sub:          { ~mapLin.(~parameters[\density],     0, 1, 0.5, 1.0) },
 	norm:         { ~mapExp.(~parameters[\density],     0, 1, 0.9, 0.1) },
@@ -252,21 +252,73 @@ SynthDef(\textureSynth, { |amp = 0.1, gate = 1, ffreq = 1000, rq = 0.3, modRate 
     n
 };
 
-// --- Markov harmony (degrees 1..7) ---
-~degreeMarkov = (
-    1: [[4,0.30],[5,0.30],[6,0.10],[2,0.20],[3,0.10]],
-    2: [[5,0.40],[7,0.20],[1,0.40]],
-    3: [[6,0.40],[4,0.20],[2,0.20],[1,0.20]],
-    4: [[5,0.40],[2,0.20],[1,0.40]],
-    5: [[1,0.50],[6,0.20],[4,0.20],[3,0.10]],
-    6: [[2,0.30],[4,0.20],[5,0.30],[1,0.20]],
-    7: [[1,0.70],[3,0.30]]
+// --- Markov second order harmony (degrees 1..7) ---
+~degreeMarkov2 = (
+    [1,1]: [[2,0.3],[3,0.3],[4,0.3],[5,0.1]],
+    [1,2]: [[3,0.3],[4,0.4],[6,0.3]],
+    [1,3]: [[4,0.4],[6,0.4],[2,0.2]],
+    [1,4]: [[5,0.4],[2,0.3],[6,0.3]],
+    [1,5]: [[6,0.4],[4,0.4],[2,0.2]],
+    [1,6]: [[4,0.4],[2,0.3],[3,0.3]],
+    [1,7]: [[1,0.3],[3,0.4],[4,0.3]],
+
+    [2,1]: [[4,0.4],[5,0.3],[3,0.3]],
+    [2,2]: [[4,0.4],[6,0.4],[1,0.2]],
+    [2,3]: [[4,0.3],[1,0.3],[6,0.4]],
+    [2,4]: [[5,0.3],[6,0.3],[1,0.4]],
+    [2,5]: [[1,0.4],[6,0.3],[3,0.3]],
+    [2,6]: [[4,0.4],[2,0.3],[1,0.3]],
+    [2,7]: [[1,0.3],[4,0.4],[2,0.3]],
+
+    [3,1]: [[6,0.4],[4,0.3],[2,0.3]],
+    [3,2]: [[4,0.4],[1,0.3],[6,0.3]],
+    [3,3]: [[6,0.3],[4,0.4],[1,0.3]],
+    [3,4]: [[5,0.4],[6,0.3],[1,0.3]],
+    [3,5]: [[1,0.3],[4,0.4],[2,0.3]],
+    [3,6]: [[4,0.3],[1,0.4],[2,0.3]],
+    [3,7]: [[1,0.4],[4,0.3],[3,0.3]],
+
+    [4,1]: [[5,0.4],[2,0.3],[6,0.3]],
+    [4,2]: [[5,0.3],[6,0.3],[1,0.4]],
+    [4,3]: [[6,0.3],[1,0.4],[2,0.3]],
+    [4,4]: [[5,0.4],[1,0.3],[6,0.3]],
+    [4,5]: [[1,0.4],[6,0.3],[2,0.3]],
+    [4,6]: [[2,0.4],[1,0.3],[5,0.3]],
+    [4,7]: [[1,0.3],[4,0.4],[2,0.3]],
+
+    [5,1]: [[6,0.4],[4,0.4],[2,0.2]],
+    [5,2]: [[6,0.3],[4,0.4],[1,0.3]],
+    [5,3]: [[1,0.3],[4,0.4],[6,0.3]],
+    [5,4]: [[1,0.4],[6,0.4],[2,0.2]],
+    [5,5]: [[1,0.4],[6,0.3],[4,0.3]],
+    [5,6]: [[2,0.4],[4,0.3],[1,0.3]],
+    [5,7]: [[1,0.3],[5,0.4],[2,0.3]],
+
+    [6,1]: [[4,0.4],[2,0.3],[3,0.3]],
+    [6,2]: [[4,0.3],[1,0.3],[5,0.4]],
+    [6,3]: [[1,0.4],[4,0.3],[2,0.3]],
+    [6,4]: [[5,0.4],[1,0.3],[2,0.3]],
+    [6,5]: [[1,0.4],[6,0.3],[4,0.3]],
+    [6,6]: [[4,0.4],[2,0.3],[1,0.3]],
+    [6,7]: [[1,0.3],[4,0.4],[2,0.3]],
+
+    [7,1]: [[5,0.4],[3,0.3],[4,0.3]],
+    [7,2]: [[4,0.3],[1,0.4],[6,0.3]],
+    [7,3]: [[1,0.4],[4,0.3],[2,0.3]],
+    [7,4]: [[1,0.3],[6,0.3],[5,0.4]],
+    [7,5]: [[1,0.4],[6,0.3],[4,0.3]],
+    [7,6]: [[4,0.4],[2,0.3],[1,0.3]],
+    [7,7]: [[1,0.4],[4,0.3],[2,0.3]]
 );
 
-~currentDegree = ~currentDegree ? 1;
 
-~nextDegree = { |cur|
-    var pairs = ~degreeMarkov[cur] ? [[1, 1.0]];
+~prevDegree = 5;
+~currentDegree = 1; // starting point
+
+~nextDegree2 = {
+    var key = [~prevDegree, ~currentDegree];
+    var pairs = ~degreeMarkov2[key] ? [[1, 1.0]]; // fallback if no entry
+
     var total = pairs.sum { |p| p[1] };
     var r = total.rand, acc = 0.0;
     var result;
@@ -276,14 +328,18 @@ SynthDef(\textureSynth, { |amp = 0.1, gate = 1, ffreq = 1000, rq = 0.3, modRate 
         r < acc
     }[0];
 
-    ("Next degree: " ++ result).postln;
+    // shift degrees for next step
+    ~prevDegree = ~currentDegree;
+    ~currentDegree = result;
+
     result
 };
+
 
 ~nextChord = {
     var deg, chord;
 
-    deg = ~nextDegree.(~currentDegree);
+    deg = ~nextDegree2.(~currentDegree);
     ~currentDegree = deg;
 
     chord = ~chordFromDegree.(deg, 4, 0.3);
@@ -379,6 +435,8 @@ Pdef(\ambgen,
             \rq, Pfunc({ ~getMapped.(\rq) }),
             \subOct, Pfunc({ ~getMapped.(\sub) }),
             \drive, Pfunc({ ~getMapped.(\drive) }),
+			\atk, Pfunc({ ~getMapped.(\atk) }),
+            \rel, Pfunc({ ~getMapped.(\rel) }),
             \amp, 0.2
         ),
 
@@ -400,24 +458,6 @@ Pdef(\ambgen,
 )
 
 Pdef(\ambgen).play;
-
-(
-Pdef(\tex,
-	Pbind(
-		\instrument, \textureSynth,
-		\dur, Pfunc({ ~getMapped.(\dur) }),
-		\ffreq, Pfunc({ ~getMapped.(\filterCutoff) }),
-		\rq, Pfunc({ ~getMapped.(\rq) }),
-		\modRate, Pfunc({ ~getMapped.(\modRate) }),
-		\modDepth, Pfunc({ ~getMapped.(\modDepth) }),
-		\pinkAmt, Pfunc({ ~getMapped.(\noisePink) }),
-		\whiteAmt, Pfunc({ ~getMapped.(\noiseWhite) }),
-		\amp, Pfunc({ ~getMapped.(\texAmp) }),
-		\pan, Pwhite(-1.0, 1.0),
-		\revMix, Pfunc({ ~getMapped.(\revMix) }),
-	)
-).play;
-)
 
 
 // --- Routine to change scales ---
@@ -458,16 +498,16 @@ x = Synth(\padSynth, [\freq, [440, 550, 660], \amp, 0.3]);
 ~nextChord.().midicps.postln;
 
 // Warmth: 0 (cold/thin) → 1 (warm/fat)
-~setParam.(\warmth, 0.7);
+~setParam.(\warmth, 0.2);
 
 // Brightness: 0 (dark/muffled) → 1 (bright/open)
-~setParam.(\brightness, 0.2);
+~setParam.(\brightness, 0.8);
 
 // Density: 0 (few voices) → 1 (many voices)
-~setParam.(\density, 0.8);
+~setParam.(\density, 0.4);
 
 // Variability: 0 (slow/static) → 1 (fast/changing)
-~setParam.(\variability, 0.9);
+~setParam.(\variability, 0.3);
 
 // Rhythmicity: 0 (smooth/legato) → 1 (tight/rhythmic)
 ~setParam.(\rhythmicity, 0.2);
