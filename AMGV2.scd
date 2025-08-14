@@ -49,7 +49,7 @@ rhythmicity from fluid/free to rhythmic/structured -> pulse emphasis
 	legato:       { ~mapLin.(~parameters[\rhythmicity], 0, 1, 1.05, 0.95) },
 	sub:          { ~mapLin.(~parameters[\density],     0, 1, 0.5, 1.0) },
 	norm:         { ~mapExp.(~parameters[\density],     0, 1, 0.9, 0.1) },
-	texAmp:       { ~mapExp.(~parameters[\density],     0, 1, 0.1, 0.5) },
+	texAmp:       { ~mapExp.(~parameters[\density],     0, 1, 0.1, 0.3) },
 	bassAmp:      { ~mapExp.(~parameters[\density],     0, 1, 0.1, 0.3) },
 	numVoices:    {
 		var raw =   ~mapLin.(~parameters[\density],         0, 1, 1, 9).round.asInteger;
@@ -221,10 +221,10 @@ SynthDef(\textureSynth, { |amp = 0.1, gate = 1, ffreq = 1000, rq = 0.3, modRate 
     ~scalePcs.collect { |interval| ~keyMidi + interval }
 };
 
-~lastChord = ~chordFromDegreeWeighted.(1, 4); // start at degree 1
+~lastChord = ~weightedChord.(1, 4); // start at degree 1
 
 // Voice leading
-~voiceLeadChord = { |newChord, lastChord|
+~voiceLeading = { |newChord, lastChord|
 	var maxLeap = ~mapLin.(~parameters[\variability], 0, 1, 4, 6).round.asInteger;
 
 	// ("[VoiceLead DEBUG] maxLeap: " ++ maxLeap).postln;
@@ -246,45 +246,66 @@ SynthDef(\textureSynth, { |amp = 0.1, gate = 1, ffreq = 1000, rq = 0.3, modRate 
     }
 };
 
-// Build a chord by weighted selection
-~chordFromDegreeWeighted = { |degree, size=4|
+// Getter for chord size with randomness influenced by variability
+~getChordSize = {
+    var baseSize = ~mapLin.(~parameters[\density], 0, 1, 2, 6).round.asInteger;
+    var varChance = ~mapLin.(~parameters[\variability], 0, 1, 0.0, 0.5); // up to 50% chance
+
+    // Randomly add or subtract 1 based on variability chance
+    if(varChance.coin) {
+        baseSize = baseSize + ([-1, 1].choose);
+    };
+
+    // Constrain size between 2 and 6 voices
+    baseSize.clip(2, 6)
+};
+
+// Build a chord by weighted selection (now reacts to variability)
+~weightedChord = { |degree|
     var scaleMidis = ~scaleToMidi.();
     var rootIndex = degree - 1;
+	var size = ~getChordSize.();
+
+    // tone pool with weights
     var tonePool = [
         [0,   1.0], // root
         [2,   0.8], // 3rd
         [4,   0.9], // 5th
         [6,   0.6], // 7th
         [8,   0.4], // 9th
-        [3,   0.3], // 4th (quartal)
-        [5,   0.2], // 6th (quartal-ish color)
+        [3,   0.3], // 4th
+        [5,   0.2], // 6th
         [7,   0.2], // 11th
         [9,   0.1]  // 13th
     ];
 
-    // helper function for weighted choice
-    var chooseWeighted = { |pool|
-        var total = pool.sum { |p| p[1] };
+    // pick from the pool without replacement
+    var chosenSteps = Array.new(size);
+    size.do {
+        var total = tonePool.sum { |p| p[1] };
         var r = total.rand, acc = 0.0;
-        pool.detect { |p|
+        var choice = tonePool.detect { |p|
             acc = acc + p[1];
             r < acc
-        }[0] // return only the offset
+        };
+        if(choice.notNil) {
+            chosenSteps.add(choice[0]);
+            tonePool.remove(choice); // remove from pool to avoid duplicates
+        };
     };
 
-    var steps = Array.fill(size, { chooseWeighted.(tonePool) }).sort;
-
-    var chord = steps.collect { |s|
+    // map steps to MIDI
+    chosenSteps = chosenSteps.sort;
+    chosenSteps.collect { |s|
         scaleMidis.wrapAt(rootIndex + s)
-    };
-
-    chord
+    }
 };
 
 // Build a chord with voice leading
-~chordFromDegreeWeightedVL = { |degree, size=4|
-    var chord = ~chordFromDegreeWeighted.(degree, size);
-    chord = ~voiceLeadChord.(chord, ~lastChord);
+~voiceLeadChord = { |degree|
+	var size = ~getChordSize.();
+    var chord = ~weightedChord.(degree, size);
+    chord = ~voiceLeading.(chord, ~lastChord);
     ~lastChord = chord; // store for next time
     chord
 };
@@ -317,12 +338,31 @@ SynthDef(\textureSynth, { |amp = 0.1, gate = 1, ffreq = 1000, rq = 0.3, modRate 
     chord
 };
 
+~enforceSuspensionRules = { |chord|
+    var has2 = chord.any { |n| (n % 12) == 2 }; // D in C major
+    var has4 = chord.any { |n| (n % 12) == 5 }; // F in C major
+
+    if(has2 or: { has4 }) {
+        // Remove major 3rd (4 semitones) or minor 3rd (3 semitones)
+        chord = chord.reject { |n| ((n % 12) == 4) or: { (n % 12) == 3 } };
+    };
+
+    chord
+};
+
 // Build the final chord
-~chordFromDegreeWeightedVLsus = { |degree, size=4|
-    var chord = ~chordFromDegreeWeighted.(degree, size);
-    chord = ~voiceLeadChord.(chord, ~lastChord);
-    chord = ~applySuspensions.(chord); // NEW STEP
-    ~lastChord = chord; // store for next step
+~finalChord = { |degree|
+	var size = ~getChordSize.();
+    var chord = ~weightedChord.(degree, size);
+	size = ~chordSizeFromDensity.();
+    chord = ~voiceLeading.(chord, ~lastChord);
+    chord = ~applySuspensions.(chord);
+    chord = ~enforceSuspensionRules.(chord);
+
+	// Debug print final chord (both MIDI & Hz)
+    ("[Chord DEBUG] MIDI: " ++ chord ++ " | Hz: " ++ chord.midicps).postln;
+
+    ~lastChord = chord;
     chord
 };
 
@@ -336,12 +376,14 @@ SynthDef(\textureSynth, { |amp = 0.1, gate = 1, ffreq = 1000, rq = 0.3, modRate 
     }.sort
 };
 
+/*
 // Do N inversions (move lowest note up an octave)
 ~invert = { |notes, times=0|
     var n = notes.copy;
     times.do { n = n.add(n.removeAt(0) + 12) };
     n
 };
+*/
 
 // --- Markov second order harmony (degrees 1..7) ---
 ~degreeMarkov2 = (
@@ -430,15 +472,19 @@ SynthDef(\textureSynth, { |amp = 0.1, gate = 1, ffreq = 1000, rq = 0.3, modRate 
 ~nextChord = {
     var deg, chord;
 
-    deg = ~nextDegree2.(~currentDegree);
+    deg = ~nextDegree2.(~currentDegree) ? 1; // fallback to degree 1 if nil
     ~currentDegree = deg;
 
-    chord = ~chordFromDegreeWeightedVLsus.(deg, 4, 0.3);
+    chord = ~finalChord.(deg, 4, 0.3);
     chord = ~voiceSpread.(chord, 60, 24);
-    chord = ~invert.(chord, rrand(0, 2));  // Random inversion
 
 	/*
-    // Debug: check for nils
+	// Remove duplicates while preserving order
+    chord = chord.as(Set).asArray.sort;
+
+	chord = ~invert.(chord, rrand(0, 2));  // Random inversion
+
+	// Debug: check for nils
     if(chord.any(_.isNil)) {
         ("[ERROR] NIL in chord: degree " ++ deg ++ " chord: " ++ chord).postln;
     } {
@@ -589,13 +635,13 @@ x = Synth(\padSynth, [\freq, [440, 550, 660], \amp, 0.3]);
 ~nextChord.().midicps.postln;
 
 // Warmth: 0 (cold/thin) → 1 (warm/fat)
-~setParam.(\warmth, 0.6);
+~setParam.(\warmth, 0.8);
 
 // Brightness: 0 (dark/muffled) → 1 (bright/open)
 ~setParam.(\brightness, 0.3);
 
 // Density: 0 (few voices) → 1 (many voices)
-~setParam.(\density, 0.7);
+~setParam.(\density, 0.4);
 
 // Variability: 0 (slow/static) → 1 (fast/changing)
 ~setParam.(\variability, 0.8);
