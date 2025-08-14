@@ -45,7 +45,7 @@ rhythmicity from fluid/free to rhythmic/structured -> pulse emphasis
 	atk:          { ~mapLin.(~parameters[\rhythmicity], 0, 1, 4.0, 0.5) },
     rel:          { ~mapLin.(~parameters[\rhythmicity], 0, 1, 8.0, 1.0) },
 	legato:       { ~mapLin.(~parameters[\rhythmicity], 0, 1, 1.05, 0.95) },
-	norm:         { ~mapLin.(~parameters[\density],     0, 1, 0.2, 0.1) },
+	norm:         { ~mapExp.(~parameters[\density],     0, 1, 0.9, 0.1) },
 	numVoices:    {
 		var raw =   ~mapLin.(~parameters[\density],         0, 1, 1, 9).round.asInteger;
 		if(raw.even) { raw = raw + 1 }; // ensure odd
@@ -295,9 +295,12 @@ Pdef(\padAndBass,
                 }).flat;
 
                 // Add octave up layer if many voices
-                if(n > 5) {
-                    voices = voices ++ ((voices * 2) * 0.5); // octave up at half volume
-                };
+				if(n > 5) {
+					var extra = voices * 2; // octave up
+					voices = voices ++ extra;
+				};
+
+				("[PAD DEBUG] voices count: " ++ voices.size).postln;
 
                 voices
             }),
@@ -318,7 +321,14 @@ Pdef(\padAndBass,
             \atk, Pfunc({ ~getMapped.(\atk) }),
             \rel, Pfunc({ ~getMapped.(\rel) }),
             \rq,  Pfunc({ ~getMapped.(\rq) }),
-			\amp, 0.2,
+			\amp, Pfunc({
+				var n = ~getMapped.(\numVoices);
+				var ampArray = Array.fill(n, { 0.3 }); // base level per voice
+				if(n > 5) {
+					ampArray = ampArray ++ Array.fill(n, { 0.1 });
+				};
+				ampArray
+			}),
         ),
 
         Pbind(
@@ -388,7 +398,7 @@ x = Synth(\padSynth, [\freq, [440, 550, 660], \amp, 0.3]);
 ~setParam.(\brightness, 0.2);
 
 // Density: 0 (few voices) → 1 (many voices)
-~setParam.(\density, 0.7);
+~setParam.(\density, 0.3);
 
 // Variability: 0 (slow/static) → 1 (fast/changing)
 ~setParam.(\variability, 0.6);
