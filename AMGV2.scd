@@ -301,6 +301,16 @@ SynthDef(\textureSynth, { |amp = 0.1, gate = 1, ffreq = 1000, rq = 0.3, modRate 
     }
 };
 
+// Range for notes
+~clampChordRange = { |notes, low=48, high=84|
+    notes.collect { |n|
+        var x = n;
+        while { x < low }  { x = x + 12 };
+        while { x > high } { x = x - 12 };
+        x
+    }
+};
+
 // Build a chord with voice leading
 ~voiceLeadChord = { |degree|
 	var size = ~getChordSize.();
@@ -641,7 +651,7 @@ x = Synth(\padSynth, [\freq, [440, 550, 660], \amp, 0.3]);
 ~setParam.(\brightness, 0.3);
 
 // Density: 0 (few voices) → 1 (many voices)
-~setParam.(\density, 0.4);
+~setParam.(\density, 0.2);
 
 // Variability: 0 (slow/static) → 1 (fast/changing)
 ~setParam.(\variability, 0.8);
