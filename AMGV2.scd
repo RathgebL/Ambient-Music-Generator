@@ -50,6 +50,7 @@ rhythmicity from fluid/free to rhythmic/structured -> pulse emphasis
 	sub:          { ~mapLin.(~parameters[\density],     0, 1, 0.5, 1.0) },
 	norm:         { ~mapExp.(~parameters[\density],     0, 1, 0.9, 0.1) },
 	texAmp:       { ~mapExp.(~parameters[\density],     0, 1, 0.1, 0.5) },
+	bassAmp:      { ~mapExp.(~parameters[\density],     0, 1, 0.1, 0.3) },
 	numVoices:    {
 		var raw =   ~mapLin.(~parameters[\density],         0, 1, 1, 9).round.asInteger;
 		if(raw.even) { raw = raw + 1 }; // ensure odd
@@ -220,18 +221,66 @@ SynthDef(\textureSynth, { |amp = 0.1, gate = 1, ffreq = 1000, rq = 0.3, modRate 
     ~scalePcs.collect { |interval| ~keyMidi + interval }
 };
 
-// Build a tertian chord from scale degree (triad..5-note), optionally add 9th
-~chordFromDegree = { |degree, size=4, add9Prob=0.0|
+~lastChord = ~chordFromDegreeWeighted.(1, 4); // start at degree 1
+
+// Voice leading
+~voiceLeadChord = { |newChord, lastChord|
+    if(lastChord.isNil) {
+        // First chord: just return it
+        newChord
+    } {
+        newChord.collect { |note, i|
+            var target = note;
+            var lastNote = lastChord.wrapAt(i);
+
+            // shift up or down octaves until closest to lastNote
+            while { target - lastNote > 6 } { target = target - 12 };
+            while { lastNote - target > 6 } { target = target + 12 };
+
+            target
+        }
+    }
+};
+
+// Build a chord by weighted selection
+~chordFromDegreeWeighted = { |degree, size=4|
     var scaleMidis = ~scaleToMidi.();
     var rootIndex = degree - 1;
-    var steps = [0, 2, 4, 6, 8].copyRange(0, size - 1); // tertian intervals
+    var tonePool = [
+        [0,   1.0], // root
+        [2,   0.8], // 3rd
+        [4,   0.9], // 5th
+        [6,   0.6], // 7th
+        [8,   0.4], // 9th
+        [3,   0.3], // 4th (quartal)
+        [5,   0.2], // 6th (quartal-ish color)
+        [7,   0.2], // 11th
+        [9,   0.1]  // 13th
+    ];
 
-    var chord = steps.collect { |s| scaleMidis.wrapAt(rootIndex + s) };
-
-    if(1.0.rand < add9Prob and: { size <= 4 }) {
-        chord = chord.add(scaleMidis.wrapAt(rootIndex + 8));
+    // helper function for weighted choice
+    var chooseWeighted = { |pool|
+        var total = pool.sum { |p| p[1] };
+        var r = total.rand, acc = 0.0;
+        pool.detect { |p|
+            acc = acc + p[1];
+            r < acc
+        }[0] // return only the offset
     };
 
+    var steps = Array.fill(size, { chooseWeighted.(tonePool) }).sort;
+
+    var chord = steps.collect { |s|
+        scaleMidis.wrapAt(rootIndex + s)
+    };
+
+    chord
+};
+
+~chordFromDegreeWeightedVL = { |degree, size=4|
+    var chord = ~chordFromDegreeWeighted.(degree, size);
+    chord = ~voiceLeadChord.(chord, ~lastChord);
+    ~lastChord = chord; // store for next time
     chord
 };
 
@@ -342,7 +391,7 @@ SynthDef(\textureSynth, { |amp = 0.1, gate = 1, ffreq = 1000, rq = 0.3, modRate 
     deg = ~nextDegree2.(~currentDegree);
     ~currentDegree = deg;
 
-    chord = ~chordFromDegree.(deg, 4, 0.3);
+    chord = ~chordFromDegreeWeightedVL.(deg, 4, 0.3);
     chord = ~voiceSpread.(chord, 60, 24);
     chord = ~invert.(chord, rrand(0, 2));  // Random inversion
 
@@ -437,7 +486,7 @@ Pdef(\ambgen,
             \drive, Pfunc({ ~getMapped.(\drive) }),
 			\atk, Pfunc({ ~getMapped.(\atk) }),
             \rel, Pfunc({ ~getMapped.(\rel) }),
-            \amp, 0.2
+            \amp, Pfunc({ ~getMapped.(\bassAmp) }),
         ),
 
 		Pbind(
@@ -498,19 +547,19 @@ x = Synth(\padSynth, [\freq, [440, 550, 660], \amp, 0.3]);
 ~nextChord.().midicps.postln;
 
 // Warmth: 0 (cold/thin) → 1 (warm/fat)
-~setParam.(\warmth, 0.2);
+~setParam.(\warmth, 0.6);
 
 // Brightness: 0 (dark/muffled) → 1 (bright/open)
-~setParam.(\brightness, 0.8);
+~setParam.(\brightness, 0.3);
 
 // Density: 0 (few voices) → 1 (many voices)
-~setParam.(\density, 0.4);
+~setParam.(\density, 0.7);
 
 // Variability: 0 (slow/static) → 1 (fast/changing)
-~setParam.(\variability, 0.3);
+~setParam.(\variability, 0.6);
 
 // Rhythmicity: 0 (smooth/legato) → 1 (tight/rhythmic)
-~setParam.(\rhythmicity, 0.2);
+~setParam.(\rhythmicity, 0.4);
 
 ~parameters.postln;
 
