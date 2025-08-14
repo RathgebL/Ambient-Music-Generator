@@ -35,19 +35,20 @@ rhythmicity from fluid/free to rhythmic/structured -> pulse emphasis
 
 ~parameterMappings = (
 	detune:       { ~mapLin.(~parameters[\warmth],      0, 1, 0.0, 0.1) },
+	drive:        { ~mapLin.(~parameters[\warmth],      0, 1, 0.05, 0.5) },
 	modDepth:     { ~mapLin.(~parameters[\warmth],      0, 1, 1, 250) },
+	noisePink:    { ~mapLin.(~parameters[\warmth],      1, 0, 0.8, 0.2) },
+	noiseWhite:   { ~mapLin.(~parameters[\warmth],      0, 1, 0.2, 0.8) },
 	filterCutoff: { ~mapExp.(~parameters[\brightness],  0, 1, 1000, 10000) },
 	rq:           { ~mapLin.(~parameters[\brightness],  0, 1, 0.9, 0.1)},
 	dur:          { ~mapLin.(~parameters[\variability], 0, 1, 16, 4)},
+	revMix:    { ~mapLin.(~parameters[\variability], 0, 1, 0.3, 0.6) },
 	pulseDiv:     { ~mapLin.(~parameters[\rhythmicity], 0, 1, 1, 4).round.asInteger },
-	sub:          { ~mapLin.(~parameters[\density],     0, 1, 0.5, 1.0) },
-    drive:        { ~mapLin.(~parameters[\warmth],      0, 1, 0.05, 0.5) },
 	atk:          { ~mapLin.(~parameters[\rhythmicity], 0, 1, 4.0, 0.5) },
     rel:          { ~mapLin.(~parameters[\rhythmicity], 0, 1, 8.0, 1.0) },
 	legato:       { ~mapLin.(~parameters[\rhythmicity], 0, 1, 1.05, 0.95) },
+	sub:          { ~mapLin.(~parameters[\density],     0, 1, 0.5, 1.0) },
 	norm:         { ~mapExp.(~parameters[\density],     0, 1, 0.9, 0.1) },
-	noisePink:    { ~mapLin.(~parameters[\warmth],      1, 0, 0.8, 0.2) },
-	noiseWhite:   { ~mapLin.(~parameters[\warmth],      0, 1, 0.2, 0.8) },
 	texAmp:       { ~mapExp.(~parameters[\density],     0, 1, 0.1, 0.5) },
 	numVoices:    {
 		var raw =   ~mapLin.(~parameters[\density],         0, 1, 1, 9).round.asInteger;
@@ -93,8 +94,8 @@ rhythmicity from fluid/free to rhythmic/structured -> pulse emphasis
 
 // --- Pad Synth ---
 (
-SynthDef(\padSynth, { |freq = 440, amp = 0.2, gate = 1, pan = 0, atk = 2.0, rel = 4.0, ffreq = 100, rq = 0.2, modRate = 1, modDepth = 100, norm = 0.3|
-    var osc, env, filt, mod;
+SynthDef(\padSynth, { |freq = 440, amp = 0.2, gate = 1, pan = 0, atk = 2.0, rel = 4.0, ffreq = 100, rq = 0.2, modRate = 1, modDepth = 100, norm = 0.3, revMix = 0.3|
+    var osc, env, filt, mod, rev;
 
     // Saw per voice
     osc = Saw.ar(freq) * norm;
@@ -109,7 +110,10 @@ SynthDef(\padSynth, { |freq = 440, amp = 0.2, gate = 1, pan = 0, atk = 2.0, rel 
     // Envelope
     env = EnvGen.kr(Env.asr(atk, 1, rel), gate, doneAction: 2);
 
-    Out.ar(0, Pan2.ar(filt * env * amp, pan));
+	// Reverb to push into space
+    rev = FreeVerb.ar(filt * env * amp, mix: revMix, room: 0.9, damp: 0.7);
+
+    Out.ar(0, Pan2.ar(rev, pan));
 }).add;
 )
 
@@ -145,7 +149,7 @@ SynthDef(\bassSynth, {
 
 // --- Textrure Synth ---
 (
-SynthDef(\textureSynth, { |amp = 0.1, gate = 1, ffreq = 1000, rq = 0.3, modRate = 0.05, modDepth = 300, pan = 0, pinkAmt = 0.5, whiteAmt = 0.5|
+SynthDef(\textureSynth, { |amp = 0.1, gate = 1, ffreq = 1000, rq = 0.3, modRate = 0.05, modDepth = 300, pan = 0, pinkAmt = 0.5, whiteAmt = 0.5, revMix = 0.5|
     var src, mod, filt, env, rev;
 
     // Noise source (slightly mixed for a warmer tone)
@@ -161,7 +165,7 @@ SynthDef(\textureSynth, { |amp = 0.1, gate = 1, ffreq = 1000, rq = 0.3, modRate 
     env = EnvGen.kr(Env.asr(2, 1, 4), gate, doneAction: 2);
 
     // Reverb to push into space
-    rev = FreeVerb.ar(filt * env * amp, mix: 0.4, room: 0.9, damp: 0.7);
+    rev = FreeVerb.ar(filt * env * amp, mix: revMix, room: 0.9, damp: 0.7);
 
     // Pan randomly per voice
     Out.ar(0, Pan2.ar(rev, pan));
@@ -301,7 +305,7 @@ SynthDef(\textureSynth, { |amp = 0.1, gate = 1, ffreq = 1000, rq = 0.3, modRate 
 
 // --- Pdef with probabilistic chord selection ---
 (
-Pdef(\padAndBass,
+Pdef(\ambgen,
     Ppar([
         Pbind(
             \instrument, \padSynth,
@@ -347,6 +351,7 @@ Pdef(\padAndBass,
             // Brightness -> filter cutoff
             \ffreq, Pfunc({ ~getMapped.(\filterCutoff) }),
 
+			\revMix, Pfunc({ ~getMapped.(\revMix) * 0.7}),
             \atk, Pfunc({ ~getMapped.(\atk) }),
             \rel, Pfunc({ ~getMapped.(\rel) }),
             \rq,  Pfunc({ ~getMapped.(\rq) }),
@@ -386,6 +391,7 @@ Pdef(\padAndBass,
 			\modDepth, Pfunc({ ~getMapped.(\modDepth) }),
 			\pinkAmt, Pfunc({ ~getMapped.(\noisePink) }),
 			\whiteAmt, Pfunc({ ~getMapped.(\noiseWhite) }),
+			\revMix, Pfunc({ ~getMapped.(\revMix) }),
 			\amp, Pfunc({ ~getMapped.(\texAmp) }),
 			\pan, Pwhite(-1.0, 1.0)
 		),
@@ -393,7 +399,7 @@ Pdef(\padAndBass,
 );
 )
 
-Pdef(\padAndBass).play;
+Pdef(\ambgen).play;
 
 (
 Pdef(\tex,
@@ -407,7 +413,8 @@ Pdef(\tex,
 		\pinkAmt, Pfunc({ ~getMapped.(\noisePink) }),
 		\whiteAmt, Pfunc({ ~getMapped.(\noiseWhite) }),
 		\amp, Pfunc({ ~getMapped.(\texAmp) }),
-		\pan, Pwhite(-1.0, 1.0)
+		\pan, Pwhite(-1.0, 1.0),
+		\revMix, Pfunc({ ~getMapped.(\revMix) }),
 	)
 ).play;
 )
@@ -460,7 +467,7 @@ x = Synth(\padSynth, [\freq, [440, 550, 660], \amp, 0.3]);
 ~setParam.(\density, 0.8);
 
 // Variability: 0 (slow/static) → 1 (fast/changing)
-~setParam.(\variability, 0.6);
+~setParam.(\variability, 0.9);
 
 // Rhythmicity: 0 (smooth/legato) → 1 (tight/rhythmic)
 ~setParam.(\rhythmicity, 0.2);
