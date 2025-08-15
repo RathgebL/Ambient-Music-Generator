@@ -312,6 +312,13 @@ SynthDef(\vinylCrackle, { |out=0, amp=0.1, dustDensity=3, lpFreq=4000, hpFreq=80
         };
     };
 
+	// Debug: check for duplicates
+	if(chosenSteps.size != chosenSteps.as(Set).size) {
+		("[WeightedChord DEBUG] Duplicate found: " ++ chosenSteps).warn;
+	} {
+		("[WeightedChord DEBUG] Unique notes: " ++ chosenSteps).postln;
+	};
+
     // map steps to MIDI
     chosenSteps = chosenSteps.sort;
     chosenSteps.collect { |s|
@@ -320,19 +327,35 @@ SynthDef(\vinylCrackle, { |out=0, amp=0.1, dustDensity=3, lpFreq=4000, hpFreq=80
 };
 
 // Range for notes
-~clampChordRange = { |notes, low=48, high=84|
-    notes.collect { |n|
+~clampChordRangeDynamic = { |notes|
+    var bright = ~mapLin.(~parameters[\warmth], 0, 1, 24, 0).round.asInteger;
+	var minNote = 48 + bright;
+	var maxNote = minNote + ~mapLin.(~parameters[\density], 0, 1, 12, 24).round.asInteger;
+
+    var clamped = notes.collect { |n|
         var x = n;
-        while { x < low }  { x = x + 12 };
-        while { x > high } { x = x - 12 };
+        while { x < minNote } { x = x + 12 };
+        while { x > maxNote } { x = x - 12 };
         x
-    }
+    };
+
+	// Debug print
+	("[Clamp DEBUG]  Min: " ++ minNote
+	 ++ " | Max: " ++ maxNote
+	 ++ " | Before: " ++ notes
+	 ++ " | After: " ++ clamped).postln;
+
+    clamped
 };
+
+
 
 // Build a chord with voice leading
 ~voiceLeadChord = { |degree|
-	var size = ~getChordSize.();
-    var chord = ~weightedChord.(degree, size);
+	var size, chord;
+	size = ~getChordSize.();
+    chord = ~weightedChord.(degree, size);
+	chord = ~clampChordRangeDynamic.(chord);
     chord = ~voiceLeading.(chord, ~lastChord);
     ~lastChord = chord; // store for next time
     chord
@@ -380,10 +403,9 @@ SynthDef(\vinylCrackle, { |out=0, amp=0.1, dustDensity=3, lpFreq=4000, hpFreq=80
 
 // Build the final chord
 ~finalChord = { |degree|
-	var size = ~getChordSize.();
-    var chord = ~weightedChord.(degree, size);
-	size = ~chordSizeFromDensity.();
-    chord = ~voiceLeading.(chord, ~lastChord);
+	var size, chord;
+	size = ~getChordSize.();
+    chord = ~voiceLeadChord.(degree);
     chord = ~applySuspensions.(chord);
     chord = ~enforceSuspensionRules.(chord);
 
@@ -504,7 +526,6 @@ SynthDef(\vinylCrackle, { |out=0, amp=0.1, dustDensity=3, lpFreq=4000, hpFreq=80
     result
 };
 
-
 ~nextChord = {
     var deg, chord;
 
@@ -537,6 +558,7 @@ SynthDef(\vinylCrackle, { |out=0, amp=0.1, dustDensity=3, lpFreq=4000, hpFreq=80
     x
 };
 )
+
 
 // --- Pdef with probabilistic chord selection ---
 
@@ -674,13 +696,13 @@ x = Synth(\padSynth, [\freq, [440, 550, 660], \amp, 0.3]);
 ~nextChord.().midicps.postln;
 
 // Warmth: 0 (cold/thin) → 1 (warm/fat)
-~setParam.(\warmth, 0.6);
+~setParam.(\warmth, 0.9);
 
 // Brightness: 0 (dark/muffled) → 1 (bright/open)
 ~setParam.(\brightness, 0.4);
 
 // Density: 0 (few voices) → 1 (many voices)
-~setParam.(\density, 0.5);
+~setParam.(\density, 0.4);
 
 // Variability: 0 (slow/static) → 1 (fast/changing)
 ~setParam.(\variability, 0.7);
