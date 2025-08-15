@@ -504,6 +504,17 @@ SynthDef(\textureSynth, { |amp = 0.1, gate = 1, ffreq = 1000, rq = 0.3, modRate 
 
     chord
 };
+
+~clampBassRange = { |note, min=24, max=48|
+    var x = note;
+    while { x < min } { x = x + 12 };
+    while { x > max } { x = x - 12 };
+
+	// Debug print bass note (both MIDI & Hz)
+    ("[Bass DEBUG] MIDI: " ++ x ++ " | Hz: " ++ x.midicps).postln;
+
+    x
+};
 )
 
 // --- Pdef with probabilistic chord selection ---
@@ -573,11 +584,12 @@ Pdef(\ambgen,
             \dur, Pfunc({ ~getMapped.(\dur) }),
 			\legato, Pfunc({ ~getMapped.(\legato) - 0.05 }),
             \freq, Pfunc({
-                var chord;
+				var chord, bassNote;
 				chord = ~nextChord.();
-                (chord[0] - 24).midicps // root note of chord - 2 octaves
-
-            }),
+				bassNote = chord[0] - 24; // root note of chord - 2 octaves
+				bassNote = ~clampBassRange.(bassNote); // keep in 12–36 range
+				bassNote.midicps
+			}),
             \ffreq, Pfunc({ ~getMapped.(\filterCutoff) }),
             \rq, Pfunc({ ~getMapped.(\rq) }),
             \subOct, Pfunc({ ~getMapped.(\sub) }),
@@ -651,7 +663,7 @@ x = Synth(\padSynth, [\freq, [440, 550, 660], \amp, 0.3]);
 ~setParam.(\brightness, 0.3);
 
 // Density: 0 (few voices) → 1 (many voices)
-~setParam.(\density, 0.2);
+~setParam.(\density, 0.6);
 
 // Variability: 0 (slow/static) → 1 (fast/changing)
 ~setParam.(\variability, 0.8);
