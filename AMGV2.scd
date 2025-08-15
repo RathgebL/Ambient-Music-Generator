@@ -280,37 +280,84 @@ SynthDef(\vinylCrackle, { |out=0, amp=0.1, dustDensity=3, lpFreq=4000, hpFreq=80
 
 // Build a chord by weighted selection (now reacts to variability)
 ~weightedChord = { |degree|
-    var scaleMidis = ~scaleToMidi.();
-    var rootIndex = degree - 1;
-	var size = ~getChordSize.();
+	var scaleMidis, rootIndex, size, tonePool, chosenSteps, total, r, acc, choice;
 
-    // tone pool with weights
-    var tonePool = [
-        [0,   1.0], // root
-        [2,   0.8], // 3rd
-        [4,   0.9], // 5th
-        [6,   0.6], // 7th
-        [8,   0.4], // 9th
-        [3,   0.3], // 4th
-        [5,   0.2], // 6th
-        [7,   0.2], // 11th
-        [9,   0.1]  // 13th
-    ];
+	scaleMidis = ~scaleToMidi.();
+	rootIndex = degree - 1;
+	size = ~getChordSize.();
 
-    // pick from the pool without replacement
-    var chosenSteps = Array.new(size);
-    size.do {
-        var total = tonePool.sum { |p| p[1] };
-        var r = total.rand, acc = 0.0;
-        var choice = tonePool.detect { |p|
-            acc = acc + p[1];
-            r < acc
-        };
-        if(choice.notNil) {
-            chosenSteps.add(choice[0]);
-            tonePool.remove(choice); // remove from pool to avoid duplicates
-        };
-    };
+	// tone pool with weights
+	tonePool = [
+		[0,   1.0], // root
+		[2,   0.8], // 3rd
+		[4,   0.9], // 5th
+		[6,   0.5], // 7th
+		[8,   0.3], // 9th
+		[3,   0.2], // 4th
+		[5,   0.1], // 6th
+		[7,   0.05], // 11th (same pitch class as 4th)
+		[9,   0.01]  // 13th (same pitch class as 6th)
+	];
+
+	// pick notes with rules
+	chosenSteps = [];
+
+	size.do {
+		// For every already chosen step in the chord...
+		chosenSteps.do { |step|
+
+			switch(step,
+
+				3, { // Already have a 4th in the chord
+					tonePool = tonePool.collect { |p|
+						// Reduce chance of adding a 6th (p[0] == 5) or a 13th (p[0] == 9)
+						if((p[0] == 5) or: (p[0] == 9)) { [p[0], p[1] * ~mapLin.(~parameters[\variability], 0, 1, 0.1, 0.5)] } { p }
+					};
+				},
+
+				5, { // Already have a 6th in the chord
+					tonePool = tonePool.collect { |p|
+						// Reduce chance of adding a 4th (p[0] == 3) or 7th (p[0] == 7)
+						if((p[0] == 3) or: (p[0] == 7)) { [p[0], p[1] * ~mapLin.(~parameters[\variability], 0, 1, 0.1, 0.5)] }
+						// Increase chance of adding a 9th (p[0] == 8)
+						{ if(p[0] == 8) { [p[0], p[1] * 1.2] } { p } }
+					};
+				},
+
+				6, { // Already have a 7th in the chord
+					tonePool = tonePool.collect { |p|
+						// Reduce chance of adding a 4th (p[0] == 3) or a 6th (p[0] == 5)
+						if((p[0] == 3) or: (p[0] == 5)) { [p[0], p[1] * ~mapLin.(~parameters[\variability], 0, 1, 0.1, 0.5)] }
+						// Increase chance of adding a 9th (p[0] == 8)
+						{ if(p[0] == 8) { [p[0], p[1] * ~mapLin.(~parameters[\variability], 0, 1, 1.1, 1.5)] } { p } }
+					};
+				},
+
+				8, { // Already have a 9th in the chord
+					tonePool = tonePool.collect { |p|
+						// Reduce chance of adding a 4th (p[0] == 3)
+						if((p[0] == 3)) { [p[0], p[1] * ~mapLin.(~parameters[\variability], 0, 1, 0.1, 0.5)] }
+						// Increase chance of adding a 3rd (p[0] == 4) or a 6th (p[0] == 5)
+						{ if((p[0] == 4) or: (p[0] == 5)) { [p[0], p[1] * ~mapLin.(~parameters[\variability], 0, 1, 1.1, 1.5)] } { p } }
+					};
+				}
+			);
+		};
+
+		// Pick notes without doubles
+		total = tonePool.sum { |p| p[1] };
+		r = total.rand;
+		acc = 0.0;
+		choice = tonePool.detect { |p|
+			acc = acc + p[1];
+			r < acc
+		};
+
+		if(choice.notNil) {
+			chosenSteps = chosenSteps.add(choice[0]);
+			tonePool.remove(choice); // remove to avoid duplicates
+		};
+	};
 
 	// Debug: check for duplicates
 	if(chosenSteps.size != chosenSteps.as(Set).size) {
@@ -319,11 +366,11 @@ SynthDef(\vinylCrackle, { |out=0, amp=0.1, dustDensity=3, lpFreq=4000, hpFreq=80
 		("[WeightedChord DEBUG] Unique notes: " ++ chosenSteps).postln;
 	};
 
-    // map steps to MIDI
-    chosenSteps = chosenSteps.sort;
-    chosenSteps.collect { |s|
-        scaleMidis.wrapAt(rootIndex + s)
-    }
+	// map steps to MIDI and sort
+	chosenSteps = chosenSteps.sort;
+	chosenSteps.collect { |s|
+		scaleMidis.wrapAt(rootIndex + s)
+	}
 };
 
 // Range for notes
@@ -699,16 +746,16 @@ x = Synth(\padSynth, [\freq, [440, 550, 660], \amp, 0.3]);
 ~setParam.(\warmth, 0.9);
 
 // Brightness: 0 (dark/muffled) → 1 (bright/open)
-~setParam.(\brightness, 0.4);
+~setParam.(\brightness, 0.2);
 
 // Density: 0 (few voices) → 1 (many voices)
-~setParam.(\density, 0.4);
+~setParam.(\density, 0.3);
 
 // Variability: 0 (slow/static) → 1 (fast/changing)
-~setParam.(\variability, 0.7);
+~setParam.(\variability, 0.3);
 
 // Rhythmicity: 0 (smooth/legato) → 1 (tight/rhythmic)
-~setParam.(\rhythmicity, 0.5);
+~setParam.(\rhythmicity, 0.1);
 
 ~parameters.postln;
 
