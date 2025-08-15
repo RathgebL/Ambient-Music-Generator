@@ -1,5 +1,7 @@
 s.reboot;
 s.meter;
+s.plotTree;
+
 
 (
 // --- Parameter Mapping Engine ---
@@ -48,7 +50,7 @@ rhythmicity from fluid/free to rhythmic/structured -> pulse emphasis
 	pulseDiv:     { ~mapLin.(~parameters[\rhythmicity], 0, 1, 1, 4).round.asInteger },
 	atk:          { ~mapExp.(1 - ~parameters[\rhythmicity], 0, 1, 0.5, 3) },
     rel:          { ~mapLin.(~parameters[\rhythmicity], 0, 1, 4, 1.0) },
-	legato:       { ~mapLin.(~parameters[\rhythmicity], 0, 1, 1.05, 0.95) },
+	legato:       { ~mapLin.(~parameters[\rhythmicity], 0, 1, 1, 0.95) },
 	sub:          { ~mapLin.(~parameters[\density],     0, 1, 0.5, 1.0) },
 	norm:         { ~mapExp.(~parameters[\density],     0, 1, 0.9, 0.1) },
 	texAmp:       { ~mapExp.(~parameters[\density],     0, 1, 0.05, 0.25) },
@@ -457,7 +459,9 @@ SynthDef(\vinylCrackle, { |out=0, amp=0.1, dustDensity=3, lpFreq=4000, hpFreq=80
     chord = ~enforceSuspensionRules.(chord);
 
 	// Debug print final chord (both MIDI & Hz + voice count)
-	("[Chord DEBUG] Voices: " ++ chord.size ++ " | MIDI: " ++ chord ++ " | Hz: " ++ chord.midicps).postln;
+	("[Chord DEBUG @ " ++ Main.elapsedTime.round(0.01) ++ "] Voices: "
+    ++ chord.size ++ " | MIDI: " ++ chord ++ " | Hz: " ++ chord.midicps).postln;
+
 
 
     ~lastChord = chord;
@@ -610,102 +614,82 @@ SynthDef(\vinylCrackle, { |out=0, amp=0.1, dustDensity=3, lpFreq=4000, hpFreq=80
 // --- Pdef with probabilistic chord selection ---
 
 (
-~chordData = Pbind(
-    \dur, Pfunc({ ~getMapped.(\dur) }),
-    \chord, Pfunc { ~nextChord.() },
-    \bass,  Pfunc { |ev| ~clampBassRange.(ev[\chord][0] - 24) }
-);
-
-~padPattern = Pbindf(
-    ~chordData, // inherit \dur, \chord, \bass
-    \instrument, \padSynth,
-	 \dur, Pfunc({ ~getMapped.(\dur) }),
-	\legato, Pfunc({ ~getMapped.(\legato) - 0.05 }),
-	\freq, Pfunc { |ev|
-		var freqs = ev[\chord].midicps; // chord comes from Pkey(\chord) in ~chordData
-		var detune = ~getMapped.(\detune);
-		var n = ~getMapped.(\numVoices);
-		var voices = Array.fill(n, { |i|
-			freqs + (detune * (i - (n - 1) / 2))
-		}).flat;
-
-		if (n > 5) {
-			voices = voices ++ (voices * 2); // octave up
-		};
-
-		voices
-	},
-	\pan, Pfunc({
-		var n = ~getMapped.(\numVoices);
-		Array.fill(n, { |i|
-			(i / (n - 1)) * 2 - 1 // evenly spread between -1 and 1
-		}).flat
-	}),
-
-	// Variability -> modRate
-	\modRate, Pfunc({ ~getMapped.(\modRate) }),
-
-	// Brightness -> filter cutoff
-	\ffreq, Pfunc({ ~getMapped.(\filterCutoff) }),
-
-	\revMix, Pfunc({ ~getMapped.(\revMix) * 0.7}),
-	\atk, Pfunc({ ~getMapped.(\atk) }),
-	\rel, Pfunc({ ~getMapped.(\rel) }),
-	\rq,  Pfunc({ ~getMapped.(\rq) }),
-	\amp, Pfunc { |ev|
-		var chord = ev[\chord];
-		var amp = ~getAmpForVoices.(chord.size);
-		amp
-	},
-);
-
-~bassPattern = Pbindf(
-    ~chordData, // inherit \dur, \chord, \bass
-    \instrument, \bassSynth,
-	\dur, Pfunc({ ~getMapped.(\dur) }),
-	\legato, Pfunc({ ~getMapped.(\legato) - 0.05 }),
-	\freq, Pkey(\bass).collect(_.midicps),
-	\ffreq, Pfunc({ ~getMapped.(\filterCutoff) }),
-	\rq, Pfunc({ ~getMapped.(\rq) }),
-	\subOct, Pfunc({ ~getMapped.(\sub) }),
-	\drive, Pfunc({ ~getMapped.(\drive) }),
-	\atk, Pfunc({ ~getMapped.(\atk) }),
-	\rel, Pfunc({ ~getMapped.(\rel) }),
-	\amp, Pfunc({ ~getMapped.(\bassAmp) }),
-);
-
-~seaPattern = Pbind(
-	\instrument, \textureSynth,
-	\dur, Pfunc({ ~getMapped.(\dur) }),
-	\legato, Pfunc({ ~getMapped.(\legato) - 0.05 }),
-	\ffreq, Pfunc({ ~getMapped.(\filterCutoff) }),
-	\rq, Pfunc({ ~getMapped.(\rq) }),
-	\modRate, Pfunc({ ~getMapped.(\modRate) }),
-	\modDepth, Pfunc({ ~getMapped.(\modDepth) }),
-	\pinkAmt, Pfunc({ ~getMapped.(\noisePink) }),
-	\whiteAmt, Pfunc({ ~getMapped.(\noiseWhite) }),
-	\revMix, Pfunc({ ~getMapped.(\revMix) }),
-	\pan, Pwhite(-1.0, 1.0),
-    \amp, Pfunc({ ~getMapped.(\texAmp) }),
-);
-
-~vinylPattern = Pbind(
-    \instrument, \vinylCrackle,
-    \dustDensity, Pfunc({ ~mapExp.(~parameters[\density], 0, 1, 2, 12) }),
-    \lpFreq, Pwhite(1500, 5000),
-    \hpFreq, Pwhite(700, 1200),
-    \amp, Pwhite(0.03, 0.15),
-    \dur, Pfunc({ ~mapLin.(~parameters[\variability], 0, 1, 6, 1).round.asInteger ** 2 })
-);
-
-
 Pdef(\ambgen,
-    Ppar([ ~padPattern, ~bassPattern, ~seaPattern, ~vinylPattern ])
+    Pspawner { |sp|
+        var padSynths = List[];
+        var bassSynths = List[];
+        var chord, dur, padFreqs, padPans, bassFreq;
+
+        loop {
+            chord = ~nextChord.();
+            dur   = ~getMapped.(\dur);
+
+            // stop old synths
+            padSynths.do { |s| s.set(\gate, 0) };
+            bassSynths.do { |s| s.set(\gate, 0) };
+            padSynths.clear;
+            bassSynths.clear;
+
+            // precompute pad params
+            padFreqs = {
+                var freqs  = chord.midicps;
+                var detune = ~getMapped.(\detune);
+                var n      = ~getMapped.(\numVoices);
+                var voices = Array.fill(n, { |i| freqs + (detune * (i - (n - 1) / 2)) }).flat;
+                if (n > 5) { voices = voices ++ (voices * 2) };
+                voices
+            }.value;
+
+            padPans = {
+                var n = ~getMapped.(\numVoices);
+                Array.fill(n, { |i| (i / (n - 1)) * 2 - 1 }).flat
+            }.value;
+
+            // precompute bass
+            bassFreq = ~clampBassRange.(chord[0] - 24).midicps;
+
+            // spawn pad voices
+            padFreqs.do { |f, i|
+                padSynths.add(Synth(\padSynth, [
+                    \freq, f,
+                    \pan, padPans[i],
+					\legato,  ~getMapped.(\legato),
+                    \modRate, ~getMapped.(\modRate),
+                    \ffreq,   ~getMapped.(\filterCutoff),
+                    \revMix,  ~getMapped.(\revMix) * 0.7,
+                    \atk,     ~getMapped.(\atk),
+                    \rel,     ~getMapped.(\rel),
+                    \rq,      ~getMapped.(\rq),
+                    \amp,     ~getAmpForVoices.(chord.size)
+                ]));
+            };
+
+            // spawn bass voice
+            bassSynths.add(Synth(\bassSynth, [
+                \freq, bassFreq,
+				\legato, ~getMapped.(\legato) * 0.97,
+                \ffreq,  ~getMapped.(\filterCutoff),
+                \rq,     ~getMapped.(\rq),
+                \subOct, ~getMapped.(\sub),
+                \drive,  ~getMapped.(\drive),
+                \atk,    ~getMapped.(\atk),
+                \rel,    ~getMapped.(\rel),
+                \amp,    ~getMapped.(\bassAmp)
+            ]));
+
+            // run sea & vinyl in parallel
+            sp.par(Pbindf(~seaPattern,   \dur, dur));
+            sp.par(Pbindf(~vinylPattern, \dur, dur));
+
+            sp.wait(dur);
+        }
+    }
 ).play;
 )
 
 
 // --- Routine to change scales ---
+
 (
 Routine({
     var allScales = ["ionian", "dorian", "phrygian", "lydian", "mixolydian", "aeolian", "locrian"], waitTime;
@@ -724,14 +708,10 @@ Routine({
 
 
 // --- Usage & Checks ---
-// Play the Synth without Pbind
-x = Synth(\padSynth, [\freq, [440, 550, 660], \amp, 0.3]);
-
 
 // Define key and scale
 ~setKey.(\C, 4);
 ~setScale.(\ionian);
-
 
 // Check scale, key and chord
 ~scalePcs.postln;     // Should be [0,2,4,5,7,9,11] for ionian
@@ -743,19 +723,19 @@ x = Synth(\padSynth, [\freq, [440, 550, 660], \amp, 0.3]);
 ~nextChord.().midicps.postln;
 
 // Warmth: 0 (cold/thin) → 1 (warm/fat)
-~setParam.(\warmth, 0.9);
+~setParam.(\warmth, 0.5);
 
 // Brightness: 0 (dark/muffled) → 1 (bright/open)
 ~setParam.(\brightness, 0.2);
 
 // Density: 0 (few voices) → 1 (many voices)
-~setParam.(\density, 0.3);
+~setParam.(\density, 0.2);
 
 // Variability: 0 (slow/static) → 1 (fast/changing)
-~setParam.(\variability, 0.3);
+~setParam.(\variability, 0.6);
 
 // Rhythmicity: 0 (smooth/legato) → 1 (tight/rhythmic)
-~setParam.(\rhythmicity, 0.1);
+~setParam.(\rhythmicity, 0.7);
 
 ~parameters.postln;
 
