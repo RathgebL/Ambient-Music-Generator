@@ -39,11 +39,13 @@ rhythmicity from fluid/free to rhythmic/structured -> pulse emphasis
 ~parameterMappings = (
 	detune:       { ~mapLin.(~parameters[\warmth],      0, 1, 0.0, 0.1) },
 	drive:        { ~mapLin.(~parameters[\warmth],      0, 1, 0.05, 0.5) },
+	humLevel:     { ~mapLin.(~parameters[\warmth],      0, 1, 0.0, 0.05) },
 	modDepth:     { ~mapLin.(~parameters[\warmth],      0, 1, 1, 250) },
 	noisePink:    { ~mapLin.(~parameters[\warmth],      1, 0, 0.8, 0.2) },
 	noiseWhite:   { ~mapLin.(~parameters[\warmth],      0, 1, 0.2, 0.8) },
 	revDamp:      { ~mapLin.(~parameters[\warmth],      0, 1, 0.2, 0.8) },
-	sub:          { ~mapLin.(~parameters[\warmth],     0, 1, 0.5, 1.0) },
+	rumbleLevel:  { ~mapLin.(~parameters[\warmth],      0, 1, 0.0, 0.2) },
+	sub:          { ~mapLin.(~parameters[\warmth],      0, 1, 0.5, 1.0) },
 	filterCutoff: { ~mapExp.(~parameters[\brightness],  0, 1, 1000, 10000) },
 	rq:           { ~mapLin.(~parameters[\brightness],  0, 1, 0.9, 0.1)},
 	dur:          { ~mapLin.(~parameters[\variability], 0, 1, 16, 8)},
@@ -53,8 +55,8 @@ rhythmicity from fluid/free to rhythmic/structured -> pulse emphasis
     rel:          { ~mapLin.(~parameters[\rhythmicity], 0, 1, 4, 1.0) },
 	legato:       { ~mapLin.(~parameters[\rhythmicity], 0, 1, 1, 0.95) },
 	norm:         { ~mapExp.(~parameters[\density],     0, 1, 0.9, 0.1) },
-	texAmp:       { ~mapExp.(~parameters[\density],     0, 1, 0.1, 0.4) },
-	bassAmp:      { ~mapExp.(~parameters[\density],     0, 1, 0.1, 0.3) },
+	texAmp:       { ~mapExp.(~parameters[\density],     0, 1, 0.2, 0.35) },
+	bassAmp:      { ~mapExp.(~parameters[\density],     0, 1, 0.1, 0.25) },
 	numVoices:    {
 		var raw =   ~mapLin.(~parameters[\density],         0, 1, 1, 9).round.asInteger;
 		if(raw.even) { raw = raw + 1 }; // ensure odd
@@ -190,19 +192,40 @@ SynthDef(\textureSynth, {
 
 // Vinyl Crackle Synth
 (
-SynthDef(\vinylCrackle, { |out=0, amp=0.1, dustDensity=3, lpFreq=4000, hpFreq=800|
-    var trig, env, src, filtered, panned, saturated;
+SynthDef(\vinylCrackle, {
+    |out=0, amp=0.1, dustDensity=3, lpFreq=4000, hpFreq=800,
+     rumbleLevel=0.1, rumbleFreq=50,
+     humLevel=0.02,
+     wowRate=0.3, wowDepth=0.05|
 
+    var trig, env, src, filtered, grainAmp, grainRel, saturated;
+    var rumble, hum, wow, mix, panned;
+
+    // --- Crackles ---
     trig = Dust.kr(dustDensity);
-    env = EnvGen.kr(Env.perc(0.001, 0.02),trig);
+    grainAmp = TRand.kr(0.1, 1.0, trig);              // per-grain random amp
+    grainRel = TRand.kr(0.003, 0.005, trig);           // per-grain random length
+    env = EnvGen.kr(Env.perc(0.001, grainRel), trig) * grainAmp;
     src = PinkNoise.ar(amp) * env;
     filtered = HPF.ar(LPF.ar(src, lpFreq), hpFreq);
-	saturated = (filtered * 3).tanh * 0.4;
-    panned = Pan2.ar(saturated, LFNoise1.kr(5).range(-0.5, 0.5));
+    saturated = (filtered * 5).tanh;
 
+    // --- Mechanical rumble (low brown noise) ---
+    rumble = LPF.ar(BrownNoise.ar(rumbleLevel), rumbleFreq);
+
+    // --- Electrical hum (fundamental + harmonics) ---
+    hum = (SinOsc.ar(50) + 0.5 * SinOsc.ar(100) + 0.25 * SinOsc.ar(150)) * humLevel;
+
+    // --- Wow/flutter (slow amplitude wobble) ---
+    wow = SinOsc.kr(wowRate, 0, wowDepth, 1);
+
+    // --- Mix & output ---
+    mix = (saturated + rumble + hum) * wow;
+    panned = Pan2.ar(mix, LFNoise1.kr(5).range(-0.5, 0.5));
     Out.ar(out, panned);
 }).add;
 )
+
 
 // --- Harmony ---
 (
@@ -389,7 +412,7 @@ SynthDef(\vinylCrackle, { |out=0, amp=0.1, dustDensity=3, lpFreq=4000, hpFreq=80
 ~clampChordRangeDynamic = { |notes|
     var bright = ~mapLin.(~parameters[\warmth], 0, 1, 24, 0).round.asInteger;
 	var minNote = 48 + bright;
-	var maxNote = minNote + ~mapLin.(~parameters[\density], 0, 1, 12, 24).round.asInteger;
+	var maxNote = minNote + ~mapLin.(~parameters[\density], 0, 1, 18, 30).round.asInteger;
 
     var clamped = notes.collect { |n|
         var x = n;
@@ -608,7 +631,7 @@ SynthDef(\vinylCrackle, { |out=0, amp=0.1, dustDensity=3, lpFreq=4000, hpFreq=80
     chord
 };
 
-~clampBassRange = { |note, min=24, max=48|
+~clampBassRange = { |note, min=36, max=48|
     var x = note;
     while { x < min } { x = x + 12 };
     while { x > max } { x = x - 12 };
@@ -648,27 +671,31 @@ SynthDef(\vinylCrackle, { |out=0, amp=0.1, dustDensity=3, lpFreq=4000, hpFreq=80
     \sus, Pfunc { |ev| ev[\sus] * ev[\dur] * thisThread.clock.beatDur },
 
     // synthesis params
-    \ffreq,   1500,
-    \rq,      0.7,
-    \modRate, Pfunc({ ~getMapped.(\modRate) } * 0.5),
-    \modDepth,Pfunc({ ~getMapped.(\modDepth) }),
-    \pinkAmt, Pfunc({ ~getMapped.(\noisePink) }),
-    \whiteAmt,Pfunc({ ~getMapped.(\noiseWhite) }),
-    \revMix,  Pfunc({ ~getMapped.(\revMix) }),
+    \ffreq,     1500,
+    \rq,        0.7,
+    \modRate,   Pfunc({ ~getMapped.(\modRate) } * 0.5),
+    \modDepth,  Pfunc({ ~getMapped.(\modDepth) }),
+    \pinkAmt,   Pfunc({ ~getMapped.(\noisePink) }),
+    \whiteAmt,  Pfunc({ ~getMapped.(\noiseWhite) }),
+    \revMix,    Pfunc({ ~getMapped.(\revMix) }),
     \waveDepth, Pfunc({ ~mapLin.(~parameters[\density], 0, 1, 0.1, 0.6) }),
     \waveRate,  Pfunc({ ~mapLin.(~parameters[\variability], 0, 1, 0.02, 0.08) }),
-    \pan,    Pwhite(-1.0, 1.0),
-    \amp,    Pfunc({ ~getMapped.(\texAmp) })
+    \pan,       Pwhite(-1.0, 1.0),
+    \amp,       Pfunc({ ~getMapped.(\texAmp) })
 );
 
-~vinylPattern = Pbind(
-    \instrument, \vinylCrackle,
-	\dur, Pfunc({(~mapLin.(~parameters[\variability], 0, 1, 6, 1).round.asInteger ** 2)
-    \dustDensity, Pfunc({ ~mapExp.(~parameters[\density], 0, 1, 2, 12) }),
-    \lpFreq, Pwhite(1500, 5000),
-    \hpFreq, Pwhite(700, 1200),
-    \amp, Pwhite(0.03, 0.15),
-	})
+~vinylPattern = Pmono(
+    \vinylCrackle,
+    \dur,         Pfunc({ ~getMapped.(\dur) }),
+	\dustDensity, Pfunc({
+		var lo = 10 - rrand(0, 3);
+		var hi = 20 - rrand(0, 5);
+		~mapExp.(~parameters[\density], 0, 1, lo, hi)}),
+    \lpFreq,      Pwhite(2000, 5000),
+    \hpFreq,      Pwhite(500, 1500),
+	\humLevel,    Pfunc({ ~getMapped.(\humLevel) }),
+    \rumbleLevel, Pfunc({ ~getMapped.(\rumbleLevel) }),
+    \amp, Pfunc({ ~getMapped.(\texAmp) } * 1.5)
 );
 
 
@@ -677,6 +704,8 @@ Pdef(\ambgen,
         var padSynths = List[];
         var bassSynths = List[];
         var chord, dur, padFreqs, padPans, bassFreq;
+
+		sp.par(~vinylPattern);
 
         loop {
             chord = ~nextChord.();
@@ -737,7 +766,6 @@ Pdef(\ambgen,
 
             // run sea & vinyl in parallel
             sp.par(Pbindf(~seaPattern));
-            sp.par(Pbindf(~vinylPattern));
 
             sp.wait(dur);
         }
@@ -745,8 +773,8 @@ Pdef(\ambgen,
 ).play;
 )
 
-// Play seaPattern by itself
-p = Pdef(\seaOnly, ~seaPattern).play;
+// Test Pdef
+p = Pdef(\vinylOnly, ~padPattern).play;
 
 // --- Routine to change scales ---
 
@@ -758,7 +786,7 @@ Routine({
         ~setScale.(allScales.choose.asSymbol);
 
         // variability → 64, 32, 16 mapping
-        waitTime = [64, 32, 16, 8][ (~parameters[\variability] * 4).floor.clip(0, 3) ];
+        waitTime = [64, 32, 16][ (~parameters[\variability] * 3).floor.clip(0, 2) ];
 
         waitTime.postln; // debug
         waitTime.wait;
@@ -783,16 +811,16 @@ Routine({
 ~nextChord.().midicps.postln;
 
 // Warmth: 0 (cold/thin) → 1 (warm/fat)
-~setParam.(\warmth, 0.6);
+~setParam.(\warmth, 0.5);
 
 // Brightness: 0 (dark/muffled) → 1 (bright/open)
-~setParam.(\brightness, 0.3);
+~setParam.(\brightness, 0.7);
 
 // Density: 0 (few voices/open) → 1 (many voices/clustered)
-~setParam.(\density, 0.5);
+~setParam.(\density, 0.8);
 
 // Variability: 0 (slow/static) → 1 (fast/changing)
-~setParam.(\variability, 0.5);
+~setParam.(\variability, 0.4);
 
 // Rhythmicity: 0 (smooth/legato) → 1 (tight/rhythmic)
 ~setParam.(\rhythmicity, 0.2);
