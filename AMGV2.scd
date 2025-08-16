@@ -43,17 +43,17 @@ rhythmicity from fluid/free to rhythmic/structured -> pulse emphasis
 	noisePink:    { ~mapLin.(~parameters[\warmth],      1, 0, 0.8, 0.2) },
 	noiseWhite:   { ~mapLin.(~parameters[\warmth],      0, 1, 0.2, 0.8) },
 	revDamp:      { ~mapLin.(~parameters[\warmth],      0, 1, 0.2, 0.8) },
+	sub:          { ~mapLin.(~parameters[\warmth],     0, 1, 0.5, 1.0) },
 	filterCutoff: { ~mapExp.(~parameters[\brightness],  0, 1, 1000, 10000) },
 	rq:           { ~mapLin.(~parameters[\brightness],  0, 1, 0.9, 0.1)},
-	dur:          { ~mapLin.(~parameters[\variability], 0, 1, 16, 4)},
+	dur:          { ~mapLin.(~parameters[\variability], 0, 1, 16, 8)},
 	revMix:       { ~mapLin.(~parameters[\variability], 0, 1, 0.3, 0.6) },
+	atk:          { ~mapExp.(1 - ~parameters[\rhythmicity], 0, 1, 0.2, 2) },
 	pulseDiv:     { ~mapLin.(~parameters[\rhythmicity], 0, 1, 1, 4).round.asInteger },
-	atk:          { ~mapExp.(1 - ~parameters[\rhythmicity], 0, 1, 0.5, 3) },
     rel:          { ~mapLin.(~parameters[\rhythmicity], 0, 1, 4, 1.0) },
 	legato:       { ~mapLin.(~parameters[\rhythmicity], 0, 1, 1, 0.95) },
-	sub:          { ~mapLin.(~parameters[\density],     0, 1, 0.5, 1.0) },
 	norm:         { ~mapExp.(~parameters[\density],     0, 1, 0.9, 0.1) },
-	texAmp:       { ~mapExp.(~parameters[\density],     0, 1, 0.05, 0.25) },
+	texAmp:       { ~mapExp.(~parameters[\density],     0, 1, 0.1, 0.4) },
 	bassAmp:      { ~mapExp.(~parameters[\density],     0, 1, 0.1, 0.3) },
 	numVoices:    {
 		var raw =   ~mapLin.(~parameters[\density],         0, 1, 1, 9).round.asInteger;
@@ -132,10 +132,10 @@ SynthDef(\bassSynth, {
     var osc, sub, mix, filt, env;
 
     // Main osc: pulse wave for bass body
-    osc = Pulse.ar(freq, 0.45, 0.8); // slightly narrow pulse for warmth
+    osc = Pulse.ar(freq, 0.45, 0.8);
 
     // Sub osc: one octave below
-    sub = SinOsc.ar(freq / 2, 0, subOct); // smooth low reinforcement
+    sub = SinOsc.ar(freq / 2, 0, subOct);
 
     // Mix and drive
     mix = (osc + sub).tanh * (1 + drive);
@@ -155,10 +155,16 @@ SynthDef(\bassSynth, {
 // --- Textrure Synth ---
 (
 // Sea like texture
-SynthDef(\textureSynth, { |amp = 0.1, gate = 1, ffreq = 1000, rq = 0.3, modRate = 0.05, modDepth = 300, pan = 0, pinkAmt = 0.5, whiteAmt = 0.5, revMix = 0.5|
-    var src, mod, filt, env, rev;
+SynthDef(\textureSynth, {
+    |amp = 0.1, ffreq = 1000, rq = 0.3,
+     modRate = 0.05, modDepth = 300, pan = 0,
+     pinkAmt = 0.5, whiteAmt = 0.5, revMix = 0.5,
+     waveRate = 0.03, waveDepth = 0.4,
+     atk = 4, sus = 1, rel = 6|  // swell timing in seconds
 
-    // Noise source (slightly mixed for a warmer tone)
+    var src, mod, filt, env, rev, waveLFO;
+
+    // Noise source (warm)
     src = PinkNoise.ar(pinkAmt) + WhiteNoise.ar(whiteAmt);
 
     // LFO modulating filter cutoff
@@ -167,21 +173,25 @@ SynthDef(\textureSynth, { |amp = 0.1, gate = 1, ffreq = 1000, rq = 0.3, modRate 
     // Resonant low-pass filter
     filt = RLPF.ar(src, mod, rq);
 
-    // Slow amplitude envelope (for triggering)
-    env = EnvGen.kr(Env.asr(2, 1, 4), gate, doneAction: 2);
+    // Wave motion LFO
+    waveLFO = SinOsc.kr(waveRate, Rand(0, 2pi)).range(1 - waveDepth, 1);
 
-    // Reverb to push into space
-    rev = FreeVerb.ar(filt * env * amp, mix: revMix, room: 0.9, damp: 0.7);
+    // ASR envelope
+    env = EnvGen.kr(Env.linen(atk, sus, rel, curve: -4), doneAction: 2);
 
-    // Pan randomly per voice
+    // Reverb space
+    rev = FreeVerb.ar(filt * env * amp * waveLFO, mix: revMix, room: 0.9, damp: 0.7);
+
     Out.ar(0, Pan2.ar(rev, pan));
 }).add;
+)
+
 )
 
 // Vinyl Crackle Synth
 (
 SynthDef(\vinylCrackle, { |out=0, amp=0.1, dustDensity=3, lpFreq=4000, hpFreq=800|
-    var trig, env, src, filtered,panned, saturated;
+    var trig, env, src, filtered, panned, saturated;
 
     trig = Dust.kr(dustDensity);
     env = EnvGen.kr(Env.perc(0.001, 0.02),trig);
@@ -614,6 +624,54 @@ SynthDef(\vinylCrackle, { |out=0, amp=0.1, dustDensity=3, lpFreq=4000, hpFreq=80
 // --- Pdef with probabilistic chord selection ---
 
 (
+~seaPattern = Pbind(
+    \instrument, \textureSynth,
+	\legato, Pwhite(0.97,1.03),
+
+    // time between waves, in beats
+	\dur, Pfunc({ ~getMapped.(\dur)}),
+
+    // envelope shaping
+    \atk, Pwhite(0.1, 0.4),   // proportion of dur
+    \sus, Pwhite(0.05, 0.2),   // proportion of dur
+    \rel, Pfunc { |ev|
+        var beatDur = thisThread.clock.beatDur;
+        var totalBeats = ev[\dur];
+        var atkBeats   = (ev[\atk] * totalBeats);
+        var susBeats   = (ev[\sus] * totalBeats);
+        var relBeats   = (totalBeats - atkBeats - susBeats).max(0.1);
+        relBeats * beatDur  // convert to seconds
+    },
+
+    // convert atk/sus also to seconds
+    \atk, Pfunc { |ev| ev[\atk] * ev[\dur] * thisThread.clock.beatDur },
+    \sus, Pfunc { |ev| ev[\sus] * ev[\dur] * thisThread.clock.beatDur },
+
+    // synthesis params
+    \ffreq,   1500,
+    \rq,      0.7,
+    \modRate, Pfunc({ ~getMapped.(\modRate) } * 0.5),
+    \modDepth,Pfunc({ ~getMapped.(\modDepth) }),
+    \pinkAmt, Pfunc({ ~getMapped.(\noisePink) }),
+    \whiteAmt,Pfunc({ ~getMapped.(\noiseWhite) }),
+    \revMix,  Pfunc({ ~getMapped.(\revMix) }),
+    \waveDepth, Pfunc({ ~mapLin.(~parameters[\density], 0, 1, 0.1, 0.6) }),
+    \waveRate,  Pfunc({ ~mapLin.(~parameters[\variability], 0, 1, 0.02, 0.08) }),
+    \pan,    Pwhite(-1.0, 1.0),
+    \amp,    Pfunc({ ~getMapped.(\texAmp) })
+);
+
+~vinylPattern = Pbind(
+    \instrument, \vinylCrackle,
+	\dur, Pfunc({(~mapLin.(~parameters[\variability], 0, 1, 6, 1).round.asInteger ** 2)
+    \dustDensity, Pfunc({ ~mapExp.(~parameters[\density], 0, 1, 2, 12) }),
+    \lpFreq, Pwhite(1500, 5000),
+    \hpFreq, Pwhite(700, 1200),
+    \amp, Pwhite(0.03, 0.15),
+	})
+);
+
+
 Pdef(\ambgen,
     Pspawner { |sp|
         var padSynths = List[];
@@ -678,8 +736,8 @@ Pdef(\ambgen,
             ]));
 
             // run sea & vinyl in parallel
-            sp.par(Pbindf(~seaPattern,   \dur, dur));
-            sp.par(Pbindf(~vinylPattern, \dur, dur));
+            sp.par(Pbindf(~seaPattern));
+            sp.par(Pbindf(~vinylPattern));
 
             sp.wait(dur);
         }
@@ -687,6 +745,8 @@ Pdef(\ambgen,
 ).play;
 )
 
+// Play seaPattern by itself
+p = Pdef(\seaOnly, ~seaPattern).play;
 
 // --- Routine to change scales ---
 
@@ -723,19 +783,19 @@ Routine({
 ~nextChord.().midicps.postln;
 
 // Warmth: 0 (cold/thin) → 1 (warm/fat)
-~setParam.(\warmth, 0.5);
+~setParam.(\warmth, 0.6);
 
 // Brightness: 0 (dark/muffled) → 1 (bright/open)
-~setParam.(\brightness, 0.2);
+~setParam.(\brightness, 0.3);
 
-// Density: 0 (few voices) → 1 (many voices)
-~setParam.(\density, 0.2);
+// Density: 0 (few voices/open) → 1 (many voices/clustered)
+~setParam.(\density, 0.5);
 
 // Variability: 0 (slow/static) → 1 (fast/changing)
-~setParam.(\variability, 0.6);
+~setParam.(\variability, 0.5);
 
 // Rhythmicity: 0 (smooth/legato) → 1 (tight/rhythmic)
-~setParam.(\rhythmicity, 0.7);
+~setParam.(\rhythmicity, 0.2);
 
 ~parameters.postln;
 
