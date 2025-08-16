@@ -371,11 +371,12 @@ SynthDef(\vinylCrackle, {
 
 // Range for notes
 ~clampChordRangeDynamic = { |notes|
-    var root = notes.first;  // assume first note = root
-    var minNote = root - 7;  // perfect 5th below root
-    var maxNote = root + 24; // 2 octaves above root
+    var root, minNote, maxNote, clamped;
+	root = notes.first;  // assume first note = root
+    minNote = root - 7;  // perfect 5th below root
+    maxNote = root + 24; // 2 octaves above root
 
-    var clamped = notes.collect { |n|
+    clamped = notes.collect { |n|
         var x = n;
         while { x < minNote } { x = x + 12 };
         while { x > maxNote } { x = x - 12 };
@@ -391,6 +392,27 @@ SynthDef(\vinylCrackle, {
     clamped
 };
 
+// Boundries for notes
+~clampChordRangeStatic = { |notes|
+    var bright = ~mapLin.(~parameters[\warmth], 0, 1, 24, 0).round.asInteger;
+	var minNote = 48 + bright;
+	var maxNote = minNote + ~mapLin.(~parameters[\density], 0, 1, 36, 24).round.asInteger;
+
+    var clamped = notes.collect { |n|
+        var x = n;
+        while { x < minNote } { x = x + 12 };
+        while { x > maxNote } { x = x - 12 };
+        x
+    };
+
+	// Debug print
+	("[Clamp DEBUG]  Min: " ++ minNote
+	 ++ " | Max: " ++ maxNote
+	 ++ " | Before: " ++ notes
+	 ++ " | After: " ++ clamped).postln;
+
+    clamped
+};
 
 ~lastChord = ~weightedChord.(1, 4); // start at degree 1
 
@@ -457,8 +479,7 @@ SynthDef(\vinylCrackle, {
 	var size, chord;
 	size = ~getChordSize.();
     chord = ~voiceLeadChord.(degree);
-    /*chord = ~applySuspensions.(chord);
-    chord = ~enforceSuspensionRules.(chord);*/
+	chord = ~clampChordRangeStatic.(chord);
 
 	// Debug print final chord (both MIDI & Hz + voice count)
 	("[Chord DEBUG @ " ++ Main.elapsedTime.round(0.01) ++ "] Voices: "
@@ -772,7 +793,7 @@ SynthDef(\vinylCrackle, {
     \waveDepth, Pfunc({ ~mapLin.(~parameters[\density], 0, 1, 0.1, 0.6) }),
     \waveRate,  Pfunc({ ~mapLin.(~parameters[\variability], 0, 1, 0.02, 0.08) }),
     \pan,       Pwhite(-1.0, 1.0),
-    \amp,       Pfunc({ ~getMapped.(\texAmp) * 0.0001})
+    \amp,       Pfunc({ ~getMapped.(\texAmp)  * 0.0001})
 );
 
 ~vinylPattern = Pmono(
@@ -786,7 +807,7 @@ SynthDef(\vinylCrackle, {
     \hpFreq,      Pwhite(500, 1500),
 	\humLevel,    Pfunc({ ~getMapped.(\humLevel) }),
     \rumbleLevel, Pfunc({ ~getMapped.(\rumbleLevel) }),
-    \amp, Pfunc({ ~getMapped.(\texAmp) } * 1.5)
+    \amp, Pfunc({ ~getMapped.(\texAmp) } * 0.0001)
 );
 
 
@@ -864,7 +885,7 @@ Pdef(\ambgen,
                 \drive,  ~getMapped.(\drive),
                 \atk,    ~getMapped.(\atk),
                 \rel,    ~getMapped.(\rel),
-                \amp,    ~getMapped.(\bassAmp)
+                \amp,    ~getMapped.(\bassAmp)  * 0.0001
             ]));
 
             // run sea & vinyl in parallel
@@ -878,7 +899,7 @@ Pdef(\ambgen,
 
 
 // Test Pdef
-p = Pdef(\vinylOnly, ~padPattern).play;
+p = Pdef(\vinylOnly, ~seaPattern).play;
 
 // --- Routine to change scales ---
 
@@ -921,7 +942,7 @@ Routine({
 ~setParam.(\brightness, 0.3);
 
 // Density: 0 (few voices/open) → 1 (many voices/clustered)
-~setParam.(\density, 0.2);
+~setParam.(\density, 0.9);
 
 // Variability: 0 (slow/static) → 1 (fast/changing)
 ~setParam.(\variability, 0.5);
