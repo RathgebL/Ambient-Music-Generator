@@ -274,45 +274,6 @@ SynthDef(\vinylCrackle, {
     ~scalePcs.collect { |interval| ~keyMidi + interval }
 };
 
-~lastChord = ~weightedChord.(1, 4); // start at degree 1
-
-// Voice leading
-~voiceLeading = { |newChord, lastChord|
-	var maxLeap = ~mapLin.(~parameters[\variability], 0, 1, 4, 6).round.asInteger;
-
-	// ("[VoiceLead DEBUG] maxLeap: " ++ maxLeap).postln;
-
-    if(lastChord.isNil) {
-        // First chord: just return it
-        newChord
-    } {
-        newChord.collect { |note, i|
-            var target = note;
-            var lastNote = lastChord.wrapAt(i);
-
-            // shift up or down octaves until closest to lastNote
-            while { target - lastNote > maxLeap } { target = target - 12 };
-            while { lastNote - target > maxLeap } { target = target + 12 };
-
-            target
-        }
-    }
-};
-
-// Getter for chord size with randomness influenced by variability
-~getChordSize = {
-    var baseSize = ~mapLin.(~parameters[\density], 0, 1, 2, 6).round.asInteger;
-    var varChance = ~mapLin.(~parameters[\variability], 0, 1, 0.0, 0.5); // up to 50% chance
-
-    // Randomly add or subtract 1 based on variability chance
-    if(varChance.coin) {
-        baseSize = baseSize + ([-1, 1].choose);
-    };
-
-    // Constrain size between 2 and 6 voices
-    baseSize.clip(2, 6)
-};
-
 // Build a chord by weighted selection (now reacts to variability)
 ~weightedChord = { |degree|
 	var scaleMidis, rootIndex, size, tonePool, chosenSteps, total, r, acc, choice;
@@ -410,9 +371,9 @@ SynthDef(\vinylCrackle, {
 
 // Range for notes
 ~clampChordRangeDynamic = { |notes|
-    var bright = ~mapLin.(~parameters[\warmth], 0, 1, 24, 0).round.asInteger;
-	var minNote = 48 + bright;
-	var maxNote = minNote + ~mapLin.(~parameters[\density], 0, 1, 18, 30).round.asInteger;
+    var root = notes.first;  // assume first note = root
+    var minNote = root - 7;  // perfect 5th below root
+    var maxNote = root + 24; // 2 octaves above root
 
     var clamped = notes.collect { |n|
         var x = n;
@@ -421,29 +382,77 @@ SynthDef(\vinylCrackle, {
         x
     };
 
-	// Debug print
-	("[Clamp DEBUG]  Min: " ++ minNote
-	 ++ " | Max: " ++ maxNote
-	 ++ " | Before: " ++ notes
-	 ++ " | After: " ++ clamped).postln;
+    // Debug
+    ("[RelClamp DEBUG] Root: " ++ root
+        ++ " | Range: " ++ minNote ++ "-" ++ maxNote
+        ++ " | Before: " ++ notes
+        ++ " | After: " ++ clamped).postln;
 
     clamped
 };
 
 
+~lastChord = ~weightedChord.(1, 4); // start at degree 1
+
+// Voice leading
+~voiceLeading = { |newChord, lastChord|
+    var maxLeap = ~mapLin.(~parameters[\variability], 0, 1, 4, 6).round.asInteger;
+
+    if(lastChord.isNil) {
+        ~clampChordRangeDynamic.(newChord)
+    } {
+        // Step 1: voice lead by nearest register
+        var led = newChord.collect { |note, i|
+            var target = note;
+            var lastNote = lastChord.wrapAt(i);
+
+            while { target - lastNote > maxLeap } { target = target - 12 };
+            while { lastNote - target > maxLeap } { target = target + 12 };
+            target
+        };
+
+        // Step 2: clamp into global range
+        led = ~clampChordRangeDynamic.(led);
+
+        // Step 3: avoid muddy intervals in low register
+        led = led.sort;
+        led = led.collect { |n, i|
+            if(i > 0 and: { n < 72 and: { (n - led[i-1]).abs < 4 } }) {
+                n + 12  // push up one octave if too close under 72
+            } {
+                n
+            }
+        };
+
+        led
+    }
+};
+
+// Getter for chord size with randomness influenced by variability
+~getChordSize = {
+    var baseSize = ~mapLin.(~parameters[\density], 0, 1, 2, 6).round.asInteger;
+    var varChance = ~mapLin.(~parameters[\variability], 0, 1, 0.0, 0.5); // up to 50% chance
+
+    // Randomly add or subtract 1 based on variability chance
+    if(varChance.coin) {
+        baseSize = baseSize + ([-1, 1].choose);
+    };
+
+    // Constrain size between 2 and 6 voices
+    baseSize.clip(2, 6)
+};
 
 // Build a chord with voice leading
 ~voiceLeadChord = { |degree|
 	var size, chord;
 	size = ~getChordSize.();
     chord = ~weightedChord.(degree, size);
-	chord = ~clampChordRangeDynamic.(chord);
     chord = ~voiceLeading.(chord, ~lastChord);
     ~lastChord = chord; // store for next time
     chord
 };
 
-// Suspensions & omissions helper
+/*// Suspensions & omissions helper
 ~applySuspensions = { |chord|
 	var probSus   = ~mapLin.(~parameters[\variability], 0, 1, 0.05, 0.4);
 	var probOmit5 = ~mapLin.(~parameters[\variability], 0, 1, 0.05, 0.25);
@@ -481,15 +490,15 @@ SynthDef(\vinylCrackle, {
     };
 
     chord
-};
+};*/
 
 // Build the final chord
 ~finalChord = { |degree|
 	var size, chord;
 	size = ~getChordSize.();
     chord = ~voiceLeadChord.(degree);
-    chord = ~applySuspensions.(chord);
-    chord = ~enforceSuspensionRules.(chord);
+    /*chord = ~applySuspensions.(chord);
+    chord = ~enforceSuspensionRules.(chord);*/
 
 	// Debug print final chord (both MIDI & Hz + voice count)
 	("[Chord DEBUG @ " ++ Main.elapsedTime.round(0.01) ++ "] Voices: "
@@ -515,16 +524,6 @@ SynthDef(\vinylCrackle, {
 // Function to get amp for current chord size
 ~getAmpForVoices = { |numVoices|
     ~ampLevels[numVoices] ? 0.1 // fallback if somehow outside 2..6
-};
-
-// Bring chord into register & optionally invert
-~voiceSpread = { |midiNotes, center=60, spread=24|
-    midiNotes.collect { |n|
-        var x = n;
-        while { x < (center - spread) } { x = x + 12 };
-        while { x > (center + spread) } { x = x - 12 };
-        x
-    }.sort
 };
 
 // --- Markov second order harmony (degrees 1..7) ---
@@ -586,13 +585,188 @@ SynthDef(\vinylCrackle, {
     [7,7]: [[1,0.4],[4,0.3],[2,0.3]]
 );
 
+// Second-order Markov for ambient harmony (degrees 1..7)
+~degreeMarkov2Ambient = (
+
+    // From I (1)
+    [1,1]: [[2,0.25],[4,0.35],[6,0.3],[1,0.1]],
+    [1,2]: [[4,0.35],[6,0.3],[1,0.2],[3,0.15]],
+    [1,4]: [[6,0.3],[1,0.3],[2,0.25],[5,0.15]],
+    [1,6]: [[1,0.3],[4,0.35],[2,0.2],[3,0.15]],
+
+    // From ii (2)
+    [2,1]: [[4,0.35],[6,0.25],[3,0.2],[1,0.2]],
+    [2,2]: [[4,0.35],[6,0.35],[1,0.2],[3,0.1]],
+    [2,3]: [[4,0.35],[6,0.3],[2,0.2],[1,0.15]],
+    [2,4]: [[6,0.3],[2,0.25],[1,0.25],[3,0.2]],
+    [2,6]: [[1,0.3],[4,0.35],[2,0.2],[3,0.15]],
+
+    // From iii (3) – acts as connector
+    [3,1]: [[6,0.35],[4,0.35],[2,0.2],[1,0.1]],
+    [3,2]: [[4,0.35],[6,0.3],[1,0.2],[3,0.15]],
+    [3,3]: [[4,0.35],[6,0.35],[2,0.2],[1,0.1]],
+    [3,4]: [[6,0.3],[2,0.3],[1,0.2],[5,0.2]],
+    [3,6]: [[1,0.3],[4,0.35],[2,0.2],[3,0.15]],
+
+    // From IV (4) – "pivot" node
+    [4,1]: [[6,0.3],[1,0.3],[2,0.25],[5,0.15]],
+    [4,2]: [[6,0.35],[4,0.25],[1,0.25],[3,0.15]],
+    [4,3]: [[6,0.3],[2,0.3],[1,0.25],[5,0.15]],
+    [4,4]: [[6,0.3],[1,0.3],[2,0.25],[5,0.15]],
+    [4,6]: [[1,0.3],[4,0.35],[2,0.2],[3,0.15]],
+
+    // From V (5) – softened
+    [5,1]: [[4,0.35],[6,0.3],[2,0.2],[1,0.15]],
+    [5,2]: [[6,0.3],[4,0.3],[1,0.25],[3,0.15]],
+    [5,3]: [[1,0.25],[4,0.35],[6,0.25],[2,0.15]],
+    [5,4]: [[1,0.25],[6,0.35],[2,0.25],[3,0.15]],
+    [5,6]: [[1,0.3],[4,0.3],[2,0.25],[3,0.15]],
+
+    // From vi (6) – modal anchor
+    [6,1]: [[1,0.3],[4,0.35],[2,0.2],[3,0.15]],
+    [6,2]: [[4,0.3],[1,0.3],[5,0.2],[3,0.2]],
+    [6,3]: [[1,0.3],[4,0.35],[2,0.2],[3,0.15]],
+    [6,4]: [[1,0.3],[6,0.25],[2,0.25],[5,0.2]],
+    [6,6]: [[1,0.3],[4,0.35],[2,0.2],[3,0.15]],
+
+    // From vii° (7) – rare, drifty
+    [7,1]: [[2,0.4],[4,0.4],[6,0.2]],
+    [7,2]: [[4,0.35],[2,0.3],[1,0.2],[6,0.15]],
+    [7,3]: [[4,0.4],[2,0.3],[6,0.2],[1,0.1]],
+    [7,4]: [[2,0.35],[6,0.35],[1,0.2],[4,0.1]],
+    [7,6]: [[1,0.3],[4,0.35],[2,0.2],[3,0.15]]
+);
+
+// Second-order Markov for exotic ambient harmony
+~degreeMarkov2Exotic = (
+
+    // I behaves less "tonic-y"
+    [1,1]: [[2,0.25],[3,0.2],[4,0.25],[6,0.2],[7,0.1]],
+    [1,2]: [[3,0.25],[4,0.2],[6,0.25],[7,0.2],[1,0.1]],
+    [1,3]: [[4,0.25],[6,0.25],[7,0.2],[2,0.15],[1,0.15]],
+    [1,4]: [[2,0.25],[6,0.25],[7,0.25],[3,0.15],[1,0.1]],
+    [1,6]: [[7,0.25],[2,0.25],[4,0.2],[3,0.2],[1,0.1]],
+    [1,7]: [[2,0.3],[4,0.25],[6,0.2],[3,0.15],[1,0.1]],
+
+    // ii wanders sideways (Dorian / Phrygian feel)
+    [2,1]: [[3,0.25],[4,0.25],[6,0.25],[7,0.15],[1,0.1]],
+    [2,2]: [[4,0.25],[6,0.25],[7,0.25],[3,0.15],[1,0.1]],
+    [2,3]: [[4,0.25],[6,0.25],[7,0.25],[2,0.15],[1,0.1]],
+    [2,4]: [[6,0.25],[7,0.25],[2,0.2],[3,0.2],[1,0.1]],
+    [2,6]: [[7,0.25],[2,0.25],[4,0.2],[3,0.2],[1,0.1]],
+
+    // iii now strong connector to exotic color
+    [3,1]: [[4,0.25],[6,0.25],[7,0.25],[2,0.15],[1,0.1]],
+    [3,2]: [[4,0.25],[6,0.25],[7,0.25],[3,0.15],[1,0.1]],
+    [3,3]: [[6,0.25],[7,0.25],[4,0.25],[2,0.15],[1,0.1]],
+    [3,4]: [[6,0.25],[7,0.25],[2,0.25],[3,0.15],[1,0.1]],
+    [3,6]: [[7,0.25],[2,0.25],[4,0.25],[3,0.15],[1,0.1]],
+
+    // IV less pivot, more modal shift
+    [4,1]: [[6,0.25],[7,0.25],[2,0.25],[3,0.15],[1,0.1]],
+    [4,2]: [[7,0.25],[4,0.25],[6,0.25],[2,0.15],[1,0.1]],
+    [4,3]: [[7,0.25],[6,0.25],[2,0.25],[3,0.15],[1,0.1]],
+    [4,4]: [[7,0.25],[6,0.25],[2,0.25],[3,0.15],[1,0.1]],
+    [4,6]: [[7,0.25],[2,0.25],[4,0.25],[3,0.15],[1,0.1]],
+
+    // V not dominant at all, can escape anywhere
+    [5,1]: [[2,0.25],[3,0.25],[6,0.25],[7,0.15],[1,0.1]],
+    [5,2]: [[6,0.25],[7,0.25],[2,0.25],[3,0.15],[1,0.1]],
+    [5,3]: [[7,0.25],[2,0.25],[6,0.25],[3,0.15],[1,0.1]],
+    [5,4]: [[7,0.25],[6,0.25],[2,0.25],[3,0.15],[1,0.1]],
+    [5,6]: [[7,0.25],[2,0.25],[4,0.25],[3,0.15],[1,0.1]],
+
+    // vi modal anchor but much freer
+    [6,1]: [[7,0.25],[2,0.25],[4,0.25],[3,0.15],[1,0.1]],
+    [6,2]: [[7,0.25],[4,0.25],[6,0.25],[2,0.15],[1,0.1]],
+    [6,3]: [[7,0.25],[2,0.25],[4,0.25],[3,0.15],[1,0.1]],
+    [6,4]: [[7,0.25],[2,0.25],[6,0.25],[3,0.15],[1,0.1]],
+    [6,6]: [[7,0.25],[2,0.25],[4,0.25],[3,0.15],[1,0.1]],
+
+    // vii° gets promoted — dreamy tension
+    [7,1]: [[2,0.25],[4,0.25],[6,0.25],[3,0.15],[7,0.1]],
+    [7,2]: [[4,0.25],[2,0.25],[6,0.25],[7,0.15],[1,0.1]],
+    [7,3]: [[4,0.25],[2,0.25],[6,0.25],[7,0.15],[1,0.1]],
+    [7,4]: [[2,0.25],[6,0.25],[7,0.25],[3,0.15],[1,0.1]],
+    [7,6]: [[2,0.25],[4,0.25],[7,0.25],[3,0.15],[1,0.1]]
+);
+//
+// // Third-order Markov: exotic/modal ambient cycles
+// // Key: [deg1, deg2, deg3] -> next-degree, probability
+// ~degreeMarkov3Exotic = (
+//
+// 	// Classic ambient moves extended
+// 	[1,3,6]: [[4,0.3],[2,0.2],[7,0.2],[1,0.3]],  // I–iii–vi → IV or sidestep
+// 	[1,4,6]: [[2,0.3],[7,0.3],[3,0.2],[1,0.2]],  // I–IV–vi → ii, vii, or hover
+// 	[1,6,4]: [[2,0.25],[3,0.25],[7,0.25],[1,0.25]],
+//
+// 	// Lydian / modal color
+// 	[4,1,2]: [[5,0.25],[7,0.25],[6,0.25],[4,0.25]], // IV–I–ii drifts outward
+// 	[4,2,5]: [[6,0.3],[7,0.3],[1,0.2],[4,0.2]],
+// 	[4,6,2]: [[7,0.25],[3,0.25],[4,0.25],[1,0.25]],
+//
+// 	// iii as a pivot
+// 	[3,6,2]: [[4,0.3],[7,0.3],[1,0.2],[6,0.2]],
+// 	[3,4,1]: [[6,0.3],[2,0.25],[7,0.25],[3,0.2]],
+// 	[3,2,4]: [[6,0.25],[7,0.25],[5,0.25],[1,0.25]],
+//
+// 	// Exotic vii° routes
+// 	[7,1,3]: [[6,0.3],[2,0.3],[4,0.2],[7,0.2]],
+// 	[7,2,6]: [[4,0.25],[1,0.25],[3,0.25],[7,0.25]],
+// 	[7,4,2]: [[6,0.3],[3,0.25],[7,0.25],[1,0.2]],
+//
+// 	// Oscillating ambiguous loops
+// 	[6,2,4]: [[7,0.25],[3,0.25],[6,0.25],[1,0.25]],
+// 	[6,4,7]: [[2,0.3],[5,0.2],[6,0.3],[1,0.2]],
+// 	[6,3,7]: [[4,0.25],[2,0.25],[6,0.25],[1,0.25]],
+//
+// 	// ii–vii°–IV type progressions
+// 	[2,7,4]: [[6,0.3],[1,0.25],[3,0.25],[2,0.2]],
+// 	[2,4,6]: [[7,0.25],[3,0.25],[2,0.25],[1,0.25]],
+// 	[2,6,3]: [[4,0.3],[7,0.25],[1,0.25],[6,0.2]],
+//
+// 	// Catch-alls (to prevent dead ends)
+// 	[1,1,1]: [[2,0.25],[3,0.25],[4,0.25],[6,0.25]],
+// 	[2,2,2]: [[4,0.25],[6,0.25],[1,0.25],[7,0.25]],
+// 	[3,3,3]: [[6,0.25],[4,0.25],[1,0.25],[7,0.25]],
+// 	[4,4,4]: [[2,0.25],[6,0.25],[7,0.25],[1,0.25]],
+// 	[5,5,5]: [[6,0.25],[4,0.25],[2,0.25],[1,0.25]],
+// 	[6,6,6]: [[4,0.25],[2,0.25],[7,0.25],[1,0.25]],
+// 	[7,7,7]: [[1,0.25],[4,0.25],[2,0.25],[6,0.25]]
+// );
+//
+// ~prevDegrees = [1,5,1]; // seed
+//
+// ~nextDegree3 = {
+// 	var key = ~prevDegrees;
+// 	var pairs = ~degreeMarkov3Exotic[key] ? [[1,1.0]]; // fallback
+//
+// 	var total = pairs.sum { |p| p[1] };
+// 	var r = total.rand, acc = 0.0;
+// 	var result = pairs.detect { |p|
+// 		acc = acc + p[1];
+// 		r < acc
+// 	}[0];
+//
+// 	// shift memory
+// 	~prevDegrees = [~prevDegrees[1], ~prevDegrees[2], result];
+// 	result
+// };
+
+~chooseMarkov = {
+    var v = ~parameters[\variability];
+    if(v < 0.4) { ~degreeMarkov2Ambient } {
+        if(v < 0.75) { ~degreeMarkov2 } { ~degreeMarkov2Exotic }
+    }
+};
 
 ~prevDegree = 5;
 ~currentDegree = 1; // starting point
 
-~nextDegree2 = {
-    var key = [~prevDegree, ~currentDegree];
-    var pairs = ~degreeMarkov2[key] ? [[1, 1.0]]; // fallback if no entry
+~nextDegree = {
+    var table = ~chooseMarkov.(); // pick the right Markov table dynamically
+    var key   = [~prevDegree, ~currentDegree];
+    var pairs = table[key] ? [[1, 1.0]]; // fallback if missing
 
     var total = pairs.sum { |p| p[1] };
     var r = total.rand, acc = 0.0;
@@ -603,7 +777,7 @@ SynthDef(\vinylCrackle, {
         r < acc
     }[0];
 
-    // shift degrees for next step
+    // update memory
     ~prevDegree = ~currentDegree;
     ~currentDegree = result;
 
@@ -613,11 +787,10 @@ SynthDef(\vinylCrackle, {
 ~nextChord = {
     var deg, chord;
 
-    deg = ~nextDegree2.(~currentDegree) ? 1; // fallback to degree 1 if nil
+    deg = ~nextDegree.() ? 1; // fallback to degree 1 if nil
     ~currentDegree = deg;
 
     chord = ~finalChord.(deg, 4, 0.3);
-    chord = ~voiceSpread.(chord, 60, 24);
 
 	/*
 	// Debug: check for nils
@@ -681,7 +854,7 @@ SynthDef(\vinylCrackle, {
     \waveDepth, Pfunc({ ~mapLin.(~parameters[\density], 0, 1, 0.1, 0.6) }),
     \waveRate,  Pfunc({ ~mapLin.(~parameters[\variability], 0, 1, 0.02, 0.08) }),
     \pan,       Pwhite(-1.0, 1.0),
-    \amp,       Pfunc({ ~getMapped.(\texAmp) })
+    \amp,       Pfunc({ ~getMapped.(\texAmp) * 0.0001})
 );
 
 ~vinylPattern = Pmono(
@@ -719,18 +892,30 @@ Pdef(\ambgen,
 
             // precompute pad params
             padFreqs = {
-                var freqs  = chord.midicps;
-                var detune = ~getMapped.(\detune);
-                var n      = ~getMapped.(\numVoices);
-                var voices = Array.fill(n, { |i| freqs + (detune * (i - (n - 1) / 2)) }).flat;
-                if (n > 5) { voices = voices ++ (voices * 2) };
-                voices
-            }.value;
+				var freqs  = chord.midicps;
+				var detune = ~getMapped.(\detune);
+				var n      = ~getMapped.(\numVoices);
 
-            padPans = {
-                var n = ~getMapped.(\numVoices);
-                Array.fill(n, { |i| (i / (n - 1)) * 2 - 1 }).flat
-            }.value;
+				// base voices
+				var baseVoices = Array.fill(n, { |i|
+					freqs + (detune * (i - (n - 1) / 2))
+				}).flat;
+
+				// octave voices
+				var octaveVoices = baseVoices * 2; // shift up an octave
+				var octaveAmpFactor = ~mapExp.(~parameters[\density], 0, 1, 0.1, 0.3);
+
+				// collect both freq + amp
+				var voicePairs = baseVoices.collect { |f| [f, 1.0] }
+				++ octaveVoices.collect { |f| [f, octaveAmpFactor] };
+
+				voicePairs
+			}.value;
+
+			// Now padPans matches total voices
+			padPans = Array.fill(padFreqs.size, { |i|
+				(i / (padFreqs.size - 1)) * 2 - 1
+			});
 
             // precompute bass
             bassFreq = ~clampBassRange.(chord[0] - 24).midicps;
@@ -811,16 +996,16 @@ Routine({
 ~nextChord.().midicps.postln;
 
 // Warmth: 0 (cold/thin) → 1 (warm/fat)
-~setParam.(\warmth, 0.5);
+~setParam.(\warmth, 0.8);
 
 // Brightness: 0 (dark/muffled) → 1 (bright/open)
-~setParam.(\brightness, 0.7);
+~setParam.(\brightness, 0.3);
 
 // Density: 0 (few voices/open) → 1 (many voices/clustered)
-~setParam.(\density, 0.8);
+~setParam.(\density, 0.2);
 
 // Variability: 0 (slow/static) → 1 (fast/changing)
-~setParam.(\variability, 0.4);
+~setParam.(\variability, 0.2);
 
 // Rhythmicity: 0 (smooth/legato) → 1 (tight/rhythmic)
 ~setParam.(\rhythmicity, 0.2);
