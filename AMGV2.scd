@@ -40,6 +40,7 @@ rhythmicity from fluid/free to rhythmic/structured -> pulse emphasis
 	detune:       { ~mapLin.(~parameters[\warmth],      0, 1, 0.0, 0.1) },
 	drive:        { ~mapLin.(~parameters[\warmth],      0, 1, 0.05, 0.5) },
 	humLevel:     { ~mapLin.(~parameters[\warmth],      0, 1, 0.0, 0.05) },
+	lpfFactor:    { ~mapLin.(~parameters[\warmth],      0, 1, 3, 12) },
 	modDepth:     { ~mapLin.(~parameters[\warmth],      0, 1, 1, 250) },
 	noisePink:    { ~mapLin.(~parameters[\warmth],      1, 0, 0.8, 0.2) },
 	noiseWhite:   { ~mapLin.(~parameters[\warmth],      0, 1, 0.2, 0.8) },
@@ -54,7 +55,8 @@ rhythmicity from fluid/free to rhythmic/structured -> pulse emphasis
 	legato:       { ~mapLin.(~parameters[\rhythmicity], 0, 1, 1, 0.95) },
 	pulseDiv:     { ~mapLin.(~parameters[\rhythmicity], 0, 1, 1, 4).round.asInteger },
     rel:          { ~mapLin.(~parameters[\rhythmicity], 0, 1, 4, 1.0) },
-	bassAmp:      { ~mapExp.(~parameters[\density],     0, 1, 0.1, 0.20) },
+	bassAmp:      { ~mapExp.(~parameters[\density],     0, 1, 0.1, 0.2) },
+	bellAmp:      { ~mapExp.(~parameters[\density],     0, 1, 0.05, 0.1) },
 	harpAmp:      { ~mapExp.(~parameters[\density],     0, 1, 0.5, 1) },
 	norm:         { ~mapExp.(~parameters[\density],     0, 1, 0.01, 0.05) },
 	texAmp:       { ~mapExp.(~parameters[\density],     0, 1, 0.2, 0.3) },
@@ -181,10 +183,10 @@ SynthDef(\harpPluck, { |out=0, freq=440, amp=0.2, decay=4, coef=0.3, pan=0,
     body = LPF.ar(string, freq * 4);
 
     // Pan
-    panSig = Pan2.ar(body, pan);
+    pan = Pan2.ar(body, pan);
 
     // Reverb
-    rev = FreeVerb.ar(panSig, mix: revMix, room: revRoom, damp: revDamp);
+    rev = FreeVerb.ar(pan, mix: revMix, room: revRoom, damp: revDamp);
 
     // Amplitude envelope controls full synth lifetime
     ampEnv = EnvGen.kr(
@@ -199,6 +201,41 @@ SynthDef(\harpPluck, { |out=0, freq=440, amp=0.2, decay=4, coef=0.3, pan=0,
 }).add;
 )
 
+
+// --- Bell Synth ---
+
+(
+SynthDef(\bell, { |out=0, freq=220, amp=0.3, pan=0, gate=1, lpfFactor=2, revMix=0.35, revRoom=1, revDamp=0.7|
+    var snd, env, partials, freqs, amps, decays, body, rev;
+
+    // main envelope (long exponential fade, gated)
+    env = EnvGen.kr(Env.asr(0.01, 1, 6, curve: -10), gate, doneAction:2);
+
+    // inharmonic partial ratios (bell-like spectra)
+    freqs = freq * [1, 2, 2.73, 3.01, 4.05, 4.97, 6.01]; // slightly weird ratios
+    amps   = [1.0, 0.5, 0.03, 0.2, 0.15, 0.1, 0.05];     // balance of partials
+    decays = [6,   2,   0.3,   1,   0.5, 1, 0.7];        // longer ring for low partials
+
+    // sum partials with individual decays
+    partials = Mix.fill(freqs.size, { |i|
+        SinOsc.ar(freqs[i]) *
+		EnvGen.kr(Env.perc(0.001, decays[i]), doneAction: 0) * amps[i]
+    });
+
+    // slight attack "clang" using FM
+    snd = partials + (SinOsc.ar(freq * 1.5, mul: 0.2) * Decay2.kr(Impulse.kr(0), 0.005, 0.2));
+
+    // soft low-pass shaping
+    body = LPF.ar(snd, freq * lpfFactor);
+
+    // stereo spread + reverb
+    body = Pan2.ar(body, pan, amp);
+    rev  = FreeVerb.ar(body, mix:revMix, room: revRoom, damp:revDamp);
+
+    // gentle saturation for fullness
+    Out.ar(out, (rev * 3).tanh * env);
+}).add;
+)
 
 
 // --- Textrure Synth ---
@@ -250,8 +287,8 @@ SynthDef(\vinylCrackle, {
 
     // --- Crackles ---
     trig = Dust.kr(dustDensity);
-    grainAmp = TRand.kr(0.1, 1.0, trig);              // per-grain random amp
-    grainRel = TRand.kr(0.003, 0.005, trig);           // per-grain random length
+    grainAmp = TRand.kr(0.1, 1.0, trig);      // per-grain random amp
+    grainRel = TRand.kr(0.003, 0.005, trig);  // per-grain random length
     env = EnvGen.kr(Env.perc(0.001, grainRel), trig) * grainAmp;
     src = PinkNoise.ar(amp) * env;
     filtered = HPF.ar(LPF.ar(src, lpFreq), hpFreq);
@@ -903,7 +940,7 @@ SynthDef(\vinylCrackle, {
     \hpFreq,      Pwhite(500, 1500),
 	\humLevel,    Pfunc({ ~getMapped.(\humLevel) }),
     \rumbleLevel, Pfunc({ ~getMapped.(\rumbleLevel) }),
-    \amp, Pfunc({ ~getMapped.(\texAmp) } * 0.0001)
+    \amp, Pfunc({ ~getMapped.(\texAmp) } )
 );
 
 
@@ -911,7 +948,7 @@ Pdef(\ambgen,
     Pspawner { |sp|
         var padSynths = List[];
         var bassSynths = List[];
-        var chord, dur, subdiv, idx, durations, padFreqs, padPans, bassFreq;
+        var chord, dur, subdiv, idx, durations, padFreqs, padPans, bassFreq, chordStartBeat;
 
 		sp.par(~vinylPattern);
 
@@ -920,8 +957,7 @@ Pdef(\ambgen,
             dur   = ~getMapped.(\dur);
 			("Duration: " ++ dur).postln;
 			durations = ~genDurations.(dur);
-
-
+			chordStartBeat = thisThread.beats;  // mark when chord started
 
             // stop old synths
             padSynths.do { |s| s.set(\gate, 0) };
@@ -973,7 +1009,7 @@ Pdef(\ambgen,
                     \atk,     ~getMapped.(\atk),
                     \rel,     ~getMapped.(\rel),
                     \rq,      ~getMapped.(\rq),
-                    \amp,     ~getAmpForVoices.(chord.size)
+                    \amp,     ~getAmpForVoices.(chord.size) * 0.4
                 ]));
             };
 
@@ -997,10 +1033,48 @@ Pdef(\ambgen,
 					\freq, Pxrand(chord.midicps, inf),
 					\decay, Pwhite(2, 5, inf),
 					\pan, Pwhite(-0.6, 0.6, inf),
+					\revMix, ~getMapped.(\revMix),
 					\amp, ~getMapped.(\harpAmp)
 				)
 			);
 
+			sp.par(
+				Pbind(
+					\instrument, \bell,
+					\dur, Pseq(Array.fill(4, { dur/4 }), 1),
+					\legato, ~getMapped.(\legato) * 0.97,
+					\freq, bassFreq * 2,
+					\lpfFactor, ~getMapped.(\lpfFactor),
+					\revMix, ~getMapped.(\revMix),
+					\amp, ~getMapped.(\bellAmp) * 2,
+					\type, Pfunc {
+						var localPos = thisThread.beats - chordStartBeat;
+						var beatPos  = ((localPos / (dur/4)).floor % 4).asInteger;  // 0,1,2,3 quarters
+						var options, weights, choice;
+
+						// Debug print
+						("[Bell DEBUG] beatPos: " ++ beatPos).postln;
+						("_____________________________________________________________________").postln;
+
+						switch(beatPos,
+							0, { options = [\note, \rest]; weights = [1, 0]; }, // bar start
+							2, { options = [\note, \rest]; weights = [0.1, 0.9]; }, // middle
+							1, { options = [\note, \rest]; weights = [0.05, 0.95]; }, // quarter 1
+							3, { options = [\note, \rest]; weights = [0.05, 0.95]; }, // quarter 3
+							{ options = [\rest]; weights = [1.0]; }  // fallback
+						);
+
+						choice = options.wchoose(weights);
+
+						("[Bell DEBUG] Chosen type: " ++ choice
+							++ " | Options: " ++ options
+							++ " | Weights: " ++ weights).postln;
+						("_____________________________________________________________________").postln;
+
+						choice
+					}
+				)
+			);
 
 			// run sea & vinyl in parallel
 			sp.par(Pbindf(~seaPattern));
@@ -1013,23 +1087,16 @@ Pdef(\ambgen,
 
 
 // Test Pdef
-p = Pdef(\vinylOnly, ~seaPattern).play;
-
 (
-Pdef(\harpDream,
+Pdef(\bell,
     Pbind(
-        \instrument, \harpPluck,
-        \scale, Scale.minorPentatonic,
-        \degree, Prand([0,2,4,7,9], inf),
-        \octave, Prand([4,5,6], inf),
-        \dur, Prand([0.25, 0.5, 0.75, 1], inf),
-        \decay, Pwhite(2,6),
-        \amp, 0.3,
-        \pan, Pwhite(-0.8,0.8)
+        \instrument, \bell,
+        \freq, 220,
+        \dur, 1,
+        \amp, 0.1,
     )
 ).play;
 )
-
 
 // --- Routine to change scales ---
 
@@ -1069,16 +1136,16 @@ Routine({
 ~setParam.(\warmth, 0.8);
 
 // Brightness: 0 (dark/muffled) → 1 (bright/open)
-~setParam.(\brightness, 0.3);
+~setParam.(\brightness, 0.4);
 
 // Density: 0 (few voices/open) → 1 (many voices/clustered)
 ~setParam.(\density, 0.2);
 
 // Variability: 0 (slow/static) → 1 (fast/changing)
-~setParam.(\variability, 1);
+~setParam.(\variability, 0.4);
 
 // Rhythmicity: 0 (smooth/legato) → 1 (tight/rhythmic)
-~setParam.(\rhythmicity, 0.9);
+~setParam.(\rhythmicity, 0.5);
 
 ~parameters.postln;
 
