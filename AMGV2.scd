@@ -48,7 +48,7 @@ rhythmicity from fluid/free to rhythmic/structured -> pulse emphasis
 	sub:          { ~mapLin.(~parameters[\warmth],      0, 1, 0.5, 1.0) },
 	filterCutoff: { ~mapExp.(~parameters[\brightness],  0, 1, 1000, 10000) },
 	rq:           { ~mapLin.(~parameters[\brightness],  0, 1, 0.9, 0.1)},
-	dur:          { ~mapLin.(~parameters[\variability], 0, 1, 16, 8)},
+	dur:          { ~mapLin.(~parameters[\variability], 0, 1, 16, 8).round.asInteger},
 	revMix:       { ~mapLin.(~parameters[\variability], 0, 1, 0.3, 0.6) },
 	atk:          { ~mapExp.(1 - ~parameters[\rhythmicity], 0, 1, 0.2, 2) },
 	legato:       { ~mapLin.(~parameters[\rhythmicity], 0, 1, 1, 0.95) },
@@ -161,19 +161,44 @@ SynthDef(\bassSynth, {
 (
 SynthDef(\harpPluck, { |out=0, freq=440, amp=0.2, decay=4, coef=0.3, pan=0,
     revMix=0.3, revRoom=0.8, revDamp=0.5|
-    var env, pluck, string, body, snd, rev;
+    var excEnv, exciter, string, body, panSig, rev, ampEnv, snd;
 
-    env = EnvGen.kr(Env.perc(0.001, decay, 1, -4), doneAction:2);
-    pluck = PinkNoise.ar * env;
-    string = Pluck.ar(pluck, trig:1, maxdelaytime:0.1, delaytime:1/freq, decaytime:decay, coef:coef);
-    body = LPF.ar(string, freq*4);
-	pan = Pan2.ar(body, pan, 1);
-    rev = FreeVerb.ar(pan, mix:revMix, room:revRoom, damp:revDamp);
-	snd = (rev * 5).tanh;
+    // Short exciter burst (noise impulse)
+    excEnv = EnvGen.kr(Env.perc(0.001, 0.03, 1), doneAction: 0);
+    exciter = PinkNoise.ar * excEnv;
 
-    Out.ar(out, snd * amp);
+    // Karplus-Strong string
+    string = Pluck.ar(
+        in: exciter,
+        trig: 1,
+        maxdelaytime: 0.1,
+        delaytime: 1/freq,
+        decaytime: decay,
+        coef: coef
+    );
+
+    // Resonant body filter
+    body = LPF.ar(string, freq * 4);
+
+    // Pan
+    panSig = Pan2.ar(body, pan);
+
+    // Reverb
+    rev = FreeVerb.ar(panSig, mix: revMix, room: revRoom, damp: revDamp);
+
+    // Amplitude envelope controls full synth lifetime
+    ampEnv = EnvGen.kr(
+        Env.linen(0.001, decay, 0.1, 1),
+        doneAction: 2
+    );
+
+    // Saturation + final scaling
+    snd = (rev * 5).tanh * ampEnv * amp;
+
+    Out.ar(out, snd);
 }).add;
 )
+
 
 
 // --- Textrure Synth ---
@@ -778,6 +803,55 @@ SynthDef(\vinylCrackle, {
 )
 
 
+// --- Arpeggiator helper ---
+
+(
+~genDurations = { |totalDur=8|
+	var choices, weights, remaining, result;
+    var rhythmicity = ~parameters[\rhythmicity];
+    var variability = ~parameters[\variability];
+	("Parameters: " ++ rhythmicity ++ ", " ++ variability).postln;
+
+    // --- Choices depend on rhythmicity ---
+    choices = [
+        [500000, 250000, 125000] * totalDur,
+        [250000, 125000, 62500] * totalDur,
+		[125000, 62500, 31250] * totalDur,
+		[62500, 31250, 15625] * totalDur
+    ].at((rhythmicity * 3).round.clip(0, 3));
+
+    // --- Weights depend on variability ---
+    weights = [
+        [10,26,10],
+        [10,18,10],
+        [10,14,10],
+		[10,12,10]
+    ].at((variability * 3).round.clip(0, 3));
+
+	// ---Generate sequence fitting exactly into totalDur ---
+
+	remaining = totalDur * 1000000; // re-adjustment factor
+	result = List[];
+
+	while { remaining > 0 } {
+		var possibleIdx = choices.selectIndices { |c| c <= remaining };
+		var choice = choices[possibleIdx].wchoose(weights[possibleIdx].normalizeSum);
+
+		result.add(choice);
+		remaining = remaining - choice;
+	};
+
+	result = result.collect { |x| x * 0.000001 };
+
+	// Debug print the full result
+	("[Arp DEBUG] Array size: " ++ result.size ++ ", Array: " ++ result).postln;
+
+	result
+};
+)
+
+(~genDurations.(8.4))
+
 // --- Pdef with probabilistic chord selection ---
 
 (
@@ -837,16 +911,17 @@ Pdef(\ambgen,
     Pspawner { |sp|
         var padSynths = List[];
         var bassSynths = List[];
-        var chord, dur, subdiv, idx, padFreqs, padPans, bassFreq;
+        var chord, dur, subdiv, idx, durations, padFreqs, padPans, bassFreq;
 
 		sp.par(~vinylPattern);
 
         loop {
             chord = ~nextChord.();
             dur   = ~getMapped.(\dur);
-			idx   = (~parameters[\rhythmicity] * 6).floor.clip(0, 4).asInteger;
-			subdiv = ([8, 10, 12, 16, 32][idx]).asInteger;
-			("dur: " ++ dur ++ " | idx: " ++ idx ++ " | subdiv: " ++ subdiv).postln;
+			("Duration: " ++ dur).postln;
+			durations = ~genDurations.(dur);
+
+
 
             // stop old synths
             padSynths.do { |s| s.set(\gate, 0) };
@@ -918,18 +993,14 @@ Pdef(\ambgen,
 			sp.par(
 				Pbind(
 					\instrument, \harpPluck,
-					\dur, dur / subdiv,
-					// cycle chord tones: Pseq(chord.midicps, inf);
-					// reshuffles chord tones: Pshuf(chord.midicps, inf);
-					// random walk: Pxrand(chord.midicps, inf)
+					\dur, Pseq(durations, 1),
 					\freq, Pxrand(chord.midicps, inf),
-
 					\decay, Pwhite(2, 5, inf),
-					\revMix,  ~getMapped.(\revMix),
 					\pan, Pwhite(-0.6, 0.6, inf),
 					\amp, ~getMapped.(\harpAmp)
-				).fin(subdiv)  // run for exactly this chord’s duration
+				)
 			);
+
 
 			// run sea & vinyl in parallel
 			sp.par(Pbindf(~seaPattern));
@@ -1004,10 +1075,10 @@ Routine({
 ~setParam.(\density, 0.2);
 
 // Variability: 0 (slow/static) → 1 (fast/changing)
-~setParam.(\variability, 0.9);
+~setParam.(\variability, 1);
 
 // Rhythmicity: 0 (smooth/legato) → 1 (tight/rhythmic)
-~setParam.(\rhythmicity, 0.5);
+~setParam.(\rhythmicity, 0.9);
 
 ~parameters.postln;
 
