@@ -837,14 +837,16 @@ Pdef(\ambgen,
     Pspawner { |sp|
         var padSynths = List[];
         var bassSynths = List[];
-        var chord, dur, padFreqs, padPans, bassFreq;
-		var arpNotes = [32, 16, 8][ (~parameters[\rhythmicity] * 4).floor.clip(0, 2) ];
+        var chord, dur, subdiv, idx, padFreqs, padPans, bassFreq;
 
 		sp.par(~vinylPattern);
 
         loop {
             chord = ~nextChord.();
             dur   = ~getMapped.(\dur);
+			idx   = (~parameters[\rhythmicity] * 6).floor.clip(0, 4).asInteger;
+			subdiv = ([8, 10, 12, 16, 32][idx]).asInteger;
+			("dur: " ++ dur ++ " | idx: " ++ idx ++ " | subdiv: " ++ subdiv).postln;
 
             // stop old synths
             padSynths.do { |s| s.set(\gate, 0) };
@@ -913,17 +915,10 @@ Pdef(\ambgen,
                 \amp,    ~getMapped.(\bassAmp)
             ]));
 
-			/*// spawn harp arpegio
-			harpSynths.add(Synth(\harpPluck, [
-				\decay, Pwhite(2,5),   // random decay length per note
-				\pan, Pwhite(-0.6,0.6) // spread in stereo
-				\amp, ~getMapped.(\harpAmp)
-			]));*/
-
 			sp.par(
 				Pbind(
 					\instrument, \harpPluck,
-					\dur, dur / 32,
+					\dur, dur / subdiv,
 					// cycle chord tones: Pseq(chord.midicps, inf);
 					// reshuffles chord tones: Pshuf(chord.midicps, inf);
 					// random walk: Pxrand(chord.midicps, inf)
@@ -933,7 +928,7 @@ Pdef(\ambgen,
 					\revMix,  ~getMapped.(\revMix),
 					\pan, Pwhite(-0.6, 0.6, inf),
 					\amp, ~getMapped.(\harpAmp)
-				).fin(32)  // run for exactly this chord’s duration
+				).fin(subdiv)  // run for exactly this chord’s duration
 			);
 
 			// run sea & vinyl in parallel
@@ -1009,10 +1004,10 @@ Routine({
 ~setParam.(\density, 0.2);
 
 // Variability: 0 (slow/static) → 1 (fast/changing)
-~setParam.(\variability, 0.5);
+~setParam.(\variability, 0.9);
 
 // Rhythmicity: 0 (smooth/legato) → 1 (tight/rhythmic)
-~setParam.(\rhythmicity, 0.8);
+~setParam.(\rhythmicity, 0.5);
 
 ~parameters.postln;
 
