@@ -51,12 +51,13 @@ rhythmicity from fluid/free to rhythmic/structured -> pulse emphasis
 	dur:          { ~mapLin.(~parameters[\variability], 0, 1, 16, 8)},
 	revMix:       { ~mapLin.(~parameters[\variability], 0, 1, 0.3, 0.6) },
 	atk:          { ~mapExp.(1 - ~parameters[\rhythmicity], 0, 1, 0.2, 2) },
+	legato:       { ~mapLin.(~parameters[\rhythmicity], 0, 1, 1, 0.95) },
 	pulseDiv:     { ~mapLin.(~parameters[\rhythmicity], 0, 1, 1, 4).round.asInteger },
     rel:          { ~mapLin.(~parameters[\rhythmicity], 0, 1, 4, 1.0) },
-	legato:       { ~mapLin.(~parameters[\rhythmicity], 0, 1, 1, 0.95) },
-	norm:         { ~mapExp.(~parameters[\density],     0, 1, 0.9, 0.1) },
-	texAmp:       { ~mapExp.(~parameters[\density],     0, 1, 0.2, 0.35) },
-	bassAmp:      { ~mapExp.(~parameters[\density],     0, 1, 0.1, 0.25) },
+	bassAmp:      { ~mapExp.(~parameters[\density],     0, 1, 0.1, 0.20) },
+	harpAmp:      { ~mapExp.(~parameters[\density],     0, 1, 0.5, 1) },
+	norm:         { ~mapExp.(~parameters[\density],     0, 1, 0.01, 0.05) },
+	texAmp:       { ~mapExp.(~parameters[\density],     0, 1, 0.2, 0.3) },
 	numVoices:    {
 		var raw =   ~mapLin.(~parameters[\density],         0, 1, 1, 9).round.asInteger;
 		if(raw.even) { raw = raw + 1 }; // ensure odd
@@ -102,7 +103,7 @@ rhythmicity from fluid/free to rhythmic/structured -> pulse emphasis
 // --- Pad Synth ---
 (
 SynthDef(\padSynth, { |freq = 440, amp = 0.2, gate = 1, pan = 0, atk = 2.0, rel = 4.0, ffreq = 100, rq = 0.2, modRate = 1, modDepth = 100, norm = 0.3, revMix = 0.3|
-    var osc, env, filt, mod, rev;
+    var osc, env, filt, mod, rev, snd;
 
     // Saw per voice
     osc = Saw.ar(freq) * norm;
@@ -118,9 +119,11 @@ SynthDef(\padSynth, { |freq = 440, amp = 0.2, gate = 1, pan = 0, atk = 2.0, rel 
     env = EnvGen.kr(Env.asr(atk, 1, rel), gate, doneAction: 2);
 
 	// Reverb to push into space
-    rev = FreeVerb.ar(filt * env * amp, mix: revMix, room: 0.9, damp: 0.7);
+    rev = FreeVerb.ar(filt * env, mix: revMix, room: 0.9, damp: 0.7);
 
-    Out.ar(0, Pan2.ar(rev, pan));
+	snd = rev * amp;
+
+    Out.ar(0, Pan2.ar(snd, pan));
 }).add;
 )
 
@@ -150,6 +153,25 @@ SynthDef(\bassSynth, {
 
     // Output
     Out.ar(0, Pan2.ar(filt * env * amp, pan));
+}).add;
+)
+
+// --- Harp Synth ---
+
+(
+SynthDef(\harpPluck, { |out=0, freq=440, amp=0.2, decay=4, coef=0.3, pan=0,
+    revMix=0.3, revRoom=0.8, revDamp=0.5|
+    var env, pluck, string, body, snd, rev;
+
+    env = EnvGen.kr(Env.perc(0.001, decay, 1, -4), doneAction:2);
+    pluck = PinkNoise.ar * env;
+    string = Pluck.ar(pluck, trig:1, maxdelaytime:0.1, delaytime:1/freq, decaytime:decay, coef:coef);
+    body = LPF.ar(string, freq*4);
+	pan = Pan2.ar(body, pan, 1);
+    rev = FreeVerb.ar(pan, mix:revMix, room:revRoom, damp:revDamp);
+	snd = (rev * 5).tanh;
+
+    Out.ar(out, snd * amp);
 }).add;
 )
 
@@ -452,8 +474,8 @@ SynthDef(\vinylCrackle, {
 
 // Getter for chord size with randomness influenced by variability
 ~getChordSize = {
-    var baseSize = ~mapLin.(~parameters[\density], 0, 1, 2, 6).round.asInteger;
-    var varChance = ~mapLin.(~parameters[\variability], 0, 1, 0.0, 0.5); // up to 50% chance
+    var baseSize = ~mapLin.(~parameters[\density], 0, 1, 2, 5).round.asInteger;
+    var varChance = ~mapLin.(~parameters[\variability], 0, 1, 0.0, 0.6);
 
     // Randomly add or subtract 1 based on variability chance
     if(varChance.coin) {
@@ -461,7 +483,7 @@ SynthDef(\vinylCrackle, {
     };
 
     // Constrain size between 2 and 6 voices
-    baseSize.clip(2, 6)
+    baseSize.clip(2, 5)
 };
 
 // Build a chord with voice leading
@@ -793,7 +815,7 @@ SynthDef(\vinylCrackle, {
     \waveDepth, Pfunc({ ~mapLin.(~parameters[\density], 0, 1, 0.1, 0.6) }),
     \waveRate,  Pfunc({ ~mapLin.(~parameters[\variability], 0, 1, 0.02, 0.08) }),
     \pan,       Pwhite(-1.0, 1.0),
-    \amp,       Pfunc({ ~getMapped.(\texAmp)  * 0.0001})
+    \amp,       Pfunc({ ~getMapped.(\texAmp) })
 );
 
 ~vinylPattern = Pmono(
@@ -816,6 +838,7 @@ Pdef(\ambgen,
         var padSynths = List[];
         var bassSynths = List[];
         var chord, dur, padFreqs, padPans, bassFreq;
+		var arpNotes = [32, 16, 8][ (~parameters[\rhythmicity] * 4).floor.clip(0, 2) ];
 
 		sp.par(~vinylPattern);
 
@@ -826,8 +849,10 @@ Pdef(\ambgen,
             // stop old synths
             padSynths.do { |s| s.set(\gate, 0) };
             bassSynths.do { |s| s.set(\gate, 0) };
+			// harpSynths.do { |s| s.set(\gate, 0) };
             padSynths.clear;
             bassSynths.clear;
+			// harpSynths.clear;
 
             // precompute pad params
             padFreqs = {
@@ -885,13 +910,36 @@ Pdef(\ambgen,
                 \drive,  ~getMapped.(\drive),
                 \atk,    ~getMapped.(\atk),
                 \rel,    ~getMapped.(\rel),
-                \amp,    ~getMapped.(\bassAmp)  * 0.0001
+                \amp,    ~getMapped.(\bassAmp)
             ]));
 
-            // run sea & vinyl in parallel
-            sp.par(Pbindf(~seaPattern));
+			/*// spawn harp arpegio
+			harpSynths.add(Synth(\harpPluck, [
+				\decay, Pwhite(2,5),   // random decay length per note
+				\pan, Pwhite(-0.6,0.6) // spread in stereo
+				\amp, ~getMapped.(\harpAmp)
+			]));*/
 
-            sp.wait(dur);
+			sp.par(
+				Pbind(
+					\instrument, \harpPluck,
+					\dur, dur / 32,
+					// cycle chord tones: Pseq(chord.midicps, inf);
+					// reshuffles chord tones: Pshuf(chord.midicps, inf);
+					// random walk: Pxrand(chord.midicps, inf)
+					\freq, Pxrand(chord.midicps, inf),
+
+					\decay, Pwhite(2, 5, inf),
+					\revMix,  ~getMapped.(\revMix),
+					\pan, Pwhite(-0.6, 0.6, inf),
+					\amp, ~getMapped.(\harpAmp)
+				).fin(32)  // run for exactly this chord’s duration
+			);
+
+			// run sea & vinyl in parallel
+			sp.par(Pbindf(~seaPattern));
+
+			sp.wait(dur);
         }
     }
 ).play;
@@ -900,6 +948,22 @@ Pdef(\ambgen,
 
 // Test Pdef
 p = Pdef(\vinylOnly, ~seaPattern).play;
+
+(
+Pdef(\harpDream,
+    Pbind(
+        \instrument, \harpPluck,
+        \scale, Scale.minorPentatonic,
+        \degree, Prand([0,2,4,7,9], inf),
+        \octave, Prand([4,5,6], inf),
+        \dur, Prand([0.25, 0.5, 0.75, 1], inf),
+        \decay, Pwhite(2,6),
+        \amp, 0.3,
+        \pan, Pwhite(-0.8,0.8)
+    )
+).play;
+)
+
 
 // --- Routine to change scales ---
 
@@ -942,13 +1006,13 @@ Routine({
 ~setParam.(\brightness, 0.3);
 
 // Density: 0 (few voices/open) → 1 (many voices/clustered)
-~setParam.(\density, 0.9);
+~setParam.(\density, 0.2);
 
 // Variability: 0 (slow/static) → 1 (fast/changing)
 ~setParam.(\variability, 0.5);
 
 // Rhythmicity: 0 (smooth/legato) → 1 (tight/rhythmic)
-~setParam.(\rhythmicity, 0.2);
+~setParam.(\rhythmicity, 0.8);
 
 ~parameters.postln;
 
