@@ -1047,34 +1047,32 @@ Pdef(\ambgen,
 					\lpfFactor, ~getMapped.(\lpfFactor),
 					\revMix, ~getMapped.(\revMix),
 					\amp, ~getMapped.(\bellAmp) * 2,
-					\type, Pfunc {
-						var localPos = thisThread.beats - chordStartBeat;
-						var beatPos  = ((localPos / (dur/4)).floor % 4).asInteger;  // 0,1,2,3 quarters
-						var options, weights, choice;
 
-						// Debug print
-						("[Bell DEBUG] beatPos: " ++ beatPos).postln;
-						("_____________________________________________________________________").postln;
+					\type, Pseq({
+						var decisions = Array.fill(4, { \rest }); // 4 rests
+						var step = (0..3);
+						var bellPlayed = false;
 
-						switch(beatPos,
-							0, { options = [\note, \rest]; weights = [1, 0]; }, // bar start
-							2, { options = [\note, \rest]; weights = [0.1, 0.9]; }, // middle
-							1, { options = [\note, \rest]; weights = [0.05, 0.95]; }, // quarter 1
-							3, { options = [\note, \rest]; weights = [0.05, 0.95]; }, // quarter 3
-							{ options = [\rest]; weights = [1.0]; }  // fallback
-						);
-
-						choice = options.wchoose(weights);
-
-						("[Bell DEBUG] Chosen type: " ++ choice
-							++ " | Options: " ++ options
-							++ " | Weights: " ++ weights).postln;
-						("_____________________________________________________________________").postln;
-
-						choice
-					}
+						step.do { |i|
+							if (bellPlayed.not) {
+								var options, weights, chosen;
+								switch(i,
+									0, { options = [\note, \rest]; weights = [0.3, 0.7]; },
+									2, { options = [\note, \rest]; weights = [0.1, 0.9]; },
+									1, { options = [\note, \rest]; weights = [0.05, 0.95]; },
+									3, { options = [\note, \rest]; weights = [0.05, 0.95]; },
+									{ options = [\rest]; weights = [1.0]; }
+								);
+								chosen = options.wchoose(weights);
+								decisions[i] = chosen;
+								if (chosen == \note) { bellPlayed = true };
+							};
+						};
+						decisions
+					}.(), 1)
 				)
 			);
+
 
 			// run sea & vinyl in parallel
 			sp.par(Pbindf(~seaPattern));
