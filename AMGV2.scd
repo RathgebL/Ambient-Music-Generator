@@ -132,6 +132,38 @@ SynthDef(\padSynth, { |freq = 440, amp = 0.2, gate = 1, pan = 0, atk = 2.0, rel 
 }).add;
 )
 
+(
+SynthDef(\darkPad, { |out=0, freq=220, amp=0.2, atk=4, rel=8, detune=0.07, rq=0.3, gate=1|
+    var osc, mix, lfo, env, filt, dist, chorus;
+
+    // 3 slightly detuned saws
+    osc = Saw.ar(freq);
+
+    // Mix them
+    mix = Mix(osc) * 0.3;
+
+    // Gentle LFO to move cutoff (slowly evolving)
+    lfo = SinOsc.kr(0.05).range(0.5, 1.5);
+
+    // Filter
+    filt = RLPF.ar(mix, freq * lfo * 2, rq);
+
+    // Distortion (tanh is warm & dark)
+    dist = tanh(filt * 3);
+
+    // Add slow chorus / stereo widening
+    chorus = Splay.ar([
+        DelayC.ar(dist, 0.03, LFNoise1.kr(0.1).range(0.001, 0.02)),
+        DelayC.ar(dist, 0.03, LFNoise1.kr(0.1).range(0.001, 0.02))
+    ], spread: 0.7);
+
+    // Envelope
+    env = EnvGen.kr(Env.asr(atk, 1, rel), gate, doneAction: 2);
+
+    Out.ar(out, chorus * env * amp);
+}).add;
+)
+
 
 // --- Bass Synth ---
 (
@@ -1235,6 +1267,7 @@ SynthDef(\vinylCrackle, {
 Pdef(\ambgen,
     Pspawner { |sp|
         var padSynths = List[];
+		var darkPadSynths = List[];
         var bassSynths = List[];
 		var droneSynths = List[];
         var chord, dur, subdiv, idx, durations, padFreqs, padPans, bassFreq, chordStartBeat;
@@ -1250,30 +1283,40 @@ Pdef(\ambgen,
 
             // stop old synths
             padSynths.do { |s| s.set(\gate, 0) };
+			darkPadSynths.do { |s| s.set(\gate, 0) };
             bassSynths.do { |s| s.set(\gate, 0) };
 			droneSynths.do { |s| s.set(\gate, 0) };
             padSynths.clear;
+			darkPadSynths.clear;
             bassSynths.clear;
 			droneSynths.clear;
 
             // precompute pad params
             padFreqs = {
-				var freqs  = chord.midicps;
-				var detune = ~getMapped.(\detune);
-				var n      = ~getMapped.(\numVoices);
+				var freqs, detune, n, baseVoices, octaveVoices, octaveAmpFactor, voicePairs;
+				freqs  = chord.midicps;
+				detune = ~getMapped.(\detune);
+				n      = ~getMapped.(\numVoices);
 
 				// base voices
-				var baseVoices = Array.fill(n, { |i|
+				baseVoices = Array.fill(n, { |i|
 					freqs + (detune * (i - (n - 1) / 2))
 				}).flat;
 
 				// octave voices
-				var octaveVoices = baseVoices * 2; // shift up an octave
-				var octaveAmpFactor = ~mapExp.(~parameters[\density], 0, 1, 0.1, 0.3);
+				octaveVoices = baseVoices * 2; // shift up an octave
+
+				octaveAmpFactor = ~mapExp.(~parameters[\density], 0, 1, 0.1, 0.3);
 
 				// collect both freq + amp
-				var voicePairs = baseVoices.collect { |f| [f, 1.0] }
+				voicePairs = baseVoices.collect { |f| [f, 1.0] }
 				++ octaveVoices.collect { |f| [f, octaveAmpFactor] };
+
+				// --- Debug ---
+				("[DEBUG] chord (MIDI): " ++ chord).postln;
+				("[DEBUG] baseVoices sorted: " ++ baseVoices.sort).postln;
+				("[DEBUG] octaveVoices sorted: " ++ octaveVoices.sort).postln;
+				("[DEBUG] all voicePairs (sorted by freq): " ++ voicePairs.sort { |a, b| a[0] < b[0] }).postln;
 
 				voicePairs
 			}.value;
@@ -1289,6 +1332,22 @@ Pdef(\ambgen,
             // spawn pad voices
             padFreqs.do { |f, i|
                 padSynths.add(Synth(\padSynth, [
+                    \freq, f,
+                    \pan, padPans[i],
+					\legato,  ~getMapped.(\legato),
+                    \modRate, ~getMapped.(\modRate),
+                    \ffreq,   ~getMapped.(\filterCutoff),
+                    \revMix,  ~getMapped.(\revMix) * 0.7,
+                    \atk,     ~getMapped.(\atk),
+                    \rel,     ~getMapped.(\rel),
+                    \rq,      ~getMapped.(\rq),
+                    \amp,     ~getAmpForVoices.(chord.size) * 0.4
+                ]));
+            };
+
+			// spawn pad voices
+            padFreqs.do { |f, i|
+                darkPadSynths.add(Synth(\darkPad, [
                     \freq, f,
                     \pan, padPans[i],
 					\legato,  ~getMapped.(\legato),
@@ -1323,7 +1382,7 @@ Pdef(\ambgen,
 				\ffreq,   ~getMapped.(\filterCutoff),
 				\rq,      ~getMapped.(\rq),
 				\revMix,  ~getMapped.(\revMix) * 2,
-				\amp,     ~getMapped.(\droneAmp) * 2,
+				\amp,     ~getMapped.(\droneAmp) * 0.0001,
 				\pan,     rrand(-0.5, 0.5)
 			]));
 
@@ -1451,6 +1510,32 @@ Routine({
 	}
 }).play;
 )
+
+
+
+(
+// simple test Pbind for darkPad
+Pbind(
+    \instrument, \darkPad,
+
+	\legato, ~getMapped.(\legato) - 0.2,
+    // make a 3-note chord
+    \degree, Pseq([
+        [0, 4, 7],   // minor triad
+        [2, 5, 9],   // another chord
+        [4, 7, 11],  // etc.
+        [5, 9, 0]    // cycle back
+    ], inf),
+
+	\scale, Scale.minor,   // can switch to your ~scalePcs later
+	\octave, 4,            // fairly low register
+	\dur, Pfunc({ ~getMapped.(\dur)}),
+	\atk,    ~getMapped.(\atk),
+	\rel,    ~getMapped.(\rel),
+	\amp,    ~getMapped.(\bassAmp)
+).play;
+)
+
 
 
 
