@@ -48,8 +48,8 @@ rhythmicity from fluid/free to rhythmic/structured -> pulse emphasis
 	revDamp:      { ~mapLin.(~parameters[\warmth],      0, 1, 0.2, 0.8) },
 	rumbleLevel:  { ~mapLin.(~parameters[\warmth],      0, 1, 0.0, 0.2) },
 	sub:          { ~mapLin.(~parameters[\warmth],      0, 1, 0.5, 1.0) },
-	filterCutoff: { ~mapExp.(~parameters[\brightness],  0, 1, 1000, 10000) },
-	rq:           { ~mapLin.(~parameters[\brightness],  0, 1, 0.9, 0.1)},
+	filterCutoff: { ~mapExp.(~parameters[\brightness],  0, 1, 3000, 10000) },
+	rq:           { ~mapLin.(~parameters[\brightness],  0, 1, 2, 0.5)},
 	droneLfoRate: { ~mapLin.(~parameters[\variability], 0, 1, 0.01, 0.1) },
 	dur:          { ~mapLin.(~parameters[\variability], 0, 1, 16, 8).round.asInteger},
 	revMix:       { ~mapLin.(~parameters[\variability], 0, 1, 0.3, 0.5) },
@@ -105,7 +105,7 @@ rhythmicity from fluid/free to rhythmic/structured -> pulse emphasis
 };
 )
 
-// --- Pad Synth ---
+// --- Pad Synths ---
 (
 SynthDef(\padSynth, { |freq = 440, amp = 0.2, gate = 1, pan = 0, atk = 2.0, rel = 4.0, ffreq = 100, rq = 0.2, modRate = 1, modDepth = 100, norm = 0.3, revMix = 0.3|
     var osc, env, filt, mod, rev, snd;
@@ -436,11 +436,18 @@ SynthDef(\vinylCrackle, {
     ~scalePcs.collect { |interval| ~keyMidi + interval }
 };
 
+// Define allowed drone anchors
+~droneDegrees = [1, 2, 4, 5];
+
 // Set the drone note
 ~getDroneNote = { |degree=2, octaveShift=3|
     var scale = ~scaleToMidi.();
     var note = scale.wrapAt(degree - 1); // pick scale degree
-    note + (12 * octaveShift)            // shift if needed
+    note = note + (12 * octaveShift);           // shift if needed
+	("[Drone DEBUG] Note: " ++ note ++ " | "
+		++ note.midicps).postln;
+
+	note
 };
 
 // Build a chord by weighted selection (now reacts to variability)
@@ -1310,7 +1317,7 @@ Pdef(\ambgen,
 
 			// spawn drone
 			droneSynths.add(Synth(\droneSynth, [
-				\freq, bassFreq * 16,   // root + 4 octaves
+				\freq, ~getDroneNote.(~droneDegrees.choose, 2).midicps,  // supertonic, 2 octave shift
 				\droneDetune,  ~getMapped.(\droneDetune),
 				\lfoRate, ~getMapped.(\droneLfoRate),
 				\ffreq,   ~getMapped.(\filterCutoff),
@@ -1377,11 +1384,6 @@ Pdef(\ambgen,
 )
 
 
-// Test Pdef
-x = Synth(\droneSynth, [\freq, 880, \amp, 0.2]); // start drone
-x.set(\gate, 0); // stop drone when you’re done
-
-
 // --- Routine to change scales ---
 
 (
@@ -1434,13 +1436,15 @@ Routine({
 		0.04, 0.03, 0.03
 	];
 
-	var waitTime;
+	var waitTime, factors, idx;
 
 	loop {
 		~setScale.(allScales.wchoose(weights).asSymbol);
 
-		// variability → 64, 32, 16 mapping
-		waitTime = [64, 32, 16, 8][ (~parameters[\variability] * 4).floor.clip(0, 3) ];
+		// wait time in chord cycles
+		factors = [32, 24, 16, 12, 8, 6];
+		idx = (~parameters[\variability] * 6).floor.clip(0, 5);
+		waitTime = factors[idx] * ~getMapped.(\dur);
 
 		("Next wait time: " ++ waitTime).postln; // debug
 		waitTime.wait;
@@ -1467,16 +1471,16 @@ Routine({
 ~nextChord.().midicps.postln;
 
 // Warmth: 0 (cold/thin) → 1 (warm/fat)
-~setParam.(\warmth, 0.8);
+~setParam.(\warmth, 0.5);
 
 // Brightness: 0 (dark/muffled) → 1 (bright/open)
-~setParam.(\brightness, 0.4);
+~setParam.(\brightness, 0);
 
 // Density: 0 (few voices/open) → 1 (many voices/clustered)
 ~setParam.(\density, 0.2);
 
 // Variability: 0 (slow/static) → 1 (fast/changing)
-~setParam.(\variability, 0.4);
+~setParam.(\variability, 0.9);
 
 // Rhythmicity: 0 (smooth/legato) → 1 (tight/rhythmic)
 ~setParam.(\rhythmicity, 0.5);
