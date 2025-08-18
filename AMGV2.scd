@@ -54,6 +54,7 @@ rhythmicity from fluid/free to rhythmic/structured -> pulse emphasis
 	darkPadCutoff:{ ~mapExp.(~parameters[\brightness],  0, 1, 200, 2000) },
 	filterCutoff: { ~mapExp.(~parameters[\brightness],  0, 1, 2000, 8000) },
 	rq:           { ~mapLin.(~parameters[\brightness],  0, 1, 2, 0.5)},
+	bright:       { ~mapLin.(~parameters[\brightness],  0, 1, 0.7, 0.2)},
 	darkPadBits:  { ~mapLin.(~parameters[\variability], 0, 1, 4, 6).round.asInteger },
 	droneLfoRate: { ~mapLin.(~parameters[\variability], 0, 1, 0.01, 0.1) },
 	dur:          { ~mapLin.(~parameters[\variability], 0, 1, 16, 8).round.asInteger },
@@ -295,6 +296,53 @@ SynthDef(\harpPluck, { |out=0, freq=440, amp=0.2, decay=4, coef=0.3, pan=0,
 
     // Saturation + final scaling
     snd = (rev * 5).tanh * ampEnv * amp;
+
+    Out.ar(out, snd);
+}).add;
+)
+
+
+// --- Glass Arp Synth ---
+
+(
+SynthDef(\glassArp, { |out=0, freq=440, noiseLength=0.3, amp=0.2, atk=0.005, rel=2, pan=0,
+    revMix=0.3, rq=0.05, bright=0.7, gate=1|
+
+    var exc, excAmp, resonAmp, env, reson, partials, amps, rels, rev, snd, noise;
+
+	// Air
+	noise = tanh(PinkNoise.ar(noiseLength) * 2) * 0.5;
+	noise = FreeVerb.ar(noise, mix: revMix - 0.2, room: 0.6, damp: 0.7);
+
+    // Exciter: short burst of noise + sine
+    exc = noise + SinOsc.ar(freq, 0, 0.3);
+
+	// Debug: measure amplitude of exc
+/*	excAmp = Amplitude.kr(exc, 0.01, 0.01); // fast envelope follower
+	Poll.kr(Impulse.kr(5), excAmp, "exc amplitude");*/
+
+    // Envelope for exciter
+    env = EnvGen.kr(Env.perc(atk, rel), gate, doneAction: 2);
+
+    // Resonant filter "glass tone" (narrow bandpass)
+	partials = [1,   2,   3,   4,   5.001, 6,    20/3];
+	amps =     [1.0, 0.5, 0.4, 0.2, 0.1,   0.05, 0.01];
+	rels =     [2.0, 1.3, 1.2, 0.7, 0.3,   0.4,  0.25];
+	reson = tanh(Mix.fill(partials.size, { |i|
+		Ringz.ar(exc, freq * partials[i], rels[i], amps[i])
+	}) * 0.002);
+
+/*	resonAmp = Amplitude.kr(reson, 0.01, 0.01);
+	Poll.kr(Impulse.kr(5), resonAmp, "reson amplitude");*/
+
+    // Brightness control (emphasize high partials)
+    reson = reson * bright + LPF.ar(reson, 2000 * bright);
+
+    // Reverb for space
+    rev = FreeVerb.ar(reson * env, mix: revMix - 0.3, room: 0.9, damp: 0.4);
+
+    // Pan & output
+    snd = Pan2.ar(rev, pan, amp);
 
     Out.ar(out, snd);
 }).add;
@@ -1361,7 +1409,7 @@ Pdef(\ambgen,
                     \atk,     ~getMapped.(\atk),
                     \rel,     ~getMapped.(\rel),
                     \rq,      ~getMapped.(\rq),
-					\amp,     ~getAmpForVoices.(chord.size) * 0.005
+					\amp,     ~getAmpForVoices.(chord.size) * 0.05
                 ]));
             };
 
@@ -1381,7 +1429,7 @@ Pdef(\ambgen,
                     \atk,         ~getMapped.(\atk),
                     \rel,         ~getMapped.(\rel),
                     \rq,          ~getMapped.(\rq),
-                    \amp,         ~getAmpForVoices.(chord.size) * 0.3
+                    \amp,         ~getAmpForVoices.(chord.size) * 0.2
                 ]));
             };
 
@@ -1395,7 +1443,7 @@ Pdef(\ambgen,
                 \drive,  ~getMapped.(\drive),
                 \atk,    ~getMapped.(\atk),
                 \rel,    ~getMapped.(\rel),
-                \amp,    ~getMapped.(\bassAmp) * 0.2
+                \amp,    ~getMapped.(\bassAmp) * 0.1
             ]));
 
 			// spawn drone
@@ -1405,9 +1453,9 @@ Pdef(\ambgen,
 				\lfoRate, ~getMapped.(\droneLfoRate),
 				\ffreq,   ~getMapped.(\filterCutoff),
 				\rq,      ~getMapped.(\rq),
-				\revMix,  ~getMapped.(\revMix) * 2,
-				\amp,     ~getMapped.(\droneAmp),
-				\pan,     rrand(-0.5, 0.5)
+				\revMix,  ~getMapped.(\revMix) * 1.5,
+				\pan,     rrand(-0.5, 0.5),
+				\amp,     ~getMapped.(\droneAmp) * 0.6
 			]));
 
 			sp.par(
@@ -1418,6 +1466,18 @@ Pdef(\ambgen,
 					\decay, Pwhite(2, 5, inf),
 					\pan, Pwhite(-0.6, 0.6, inf),
 					\revMix, ~getMapped.(\revMix),
+					\amp, ~getMapped.(\harpAmp) * 0.5
+				)
+			);
+
+			sp.par(
+				Pbind(
+					\instrument, \glassArp,
+					\dur, Pseq(durations, 1),
+					\freq, Pxrand(chord.midicps*2, inf),
+					\bright, ~getMapped.(\bright),
+					\pan, Pwhite(-0.6, 0.6, inf),
+					\revMix, ~getMapped.(\revMix) * 1.3,
 					\amp, ~getMapped.(\harpAmp) * 0.7
 				)
 			);
@@ -1430,8 +1490,7 @@ Pdef(\ambgen,
 					\freq, bassFreq * 2,
 					\lpfFactor, ~getMapped.(\lpfFactor),
 					\revMix, ~getMapped.(\revMix),
-					\amp, ~getMapped.(\bellAmp),
-
+					\amp, ~getMapped.(\bellAmp) * 1.2,
 					\type, Pseq({
 						var decisions = Array.fill(4, { \rest }); // 4 rests
 						var step = (0..3);
@@ -1582,6 +1641,33 @@ Pbind(
 ).play;
 )
 
+(
+// simple test arpeggio for glassArp
+Pbind(
+    \instrument, \glassArp,
+
+    // arpeggiated chord patterns
+    \degree, Pseq([
+        [0, 3, 7],   // minor triad
+        [2, 5, 9],   // another shape
+        [4, 7, 11],  // bright color
+        [5, 9, 0]    // cycle back
+    ], inf).stutter(4),   // break into arpeggio
+
+    \scale, Scale.minor,   // test in minor scale
+    \octave, Pseq([5, 6], inf),  // alternate registers
+    \dur, Pwhite(0.25, 0.5, inf),  // shimmering variable rhythm
+    \atk, 0.01,
+    \rel, Pwhite(2, 5, inf),       // different decay times
+    \rq, Pwhite(0.01, 0.1, inf),   // resonance sharpness variation
+    \bright, Pwhite(0.5, 1.0, inf), // sparkle amount
+    \revMix, 0.7,
+    \amp, 0.1,
+    \pan, Pwhite(-0.6, 0.6, inf)   // stereo movement
+).play;
+)
+
+
 
 // --- Usage & Checks ---
 
@@ -1603,7 +1689,7 @@ Pbind(
 ~setParam.(\warmth, 0.8);
 
 // Brightness: 0 (dark/muffled) → 1 (bright/open)
-~setParam.(\brightness, 0.2);
+~setParam.(\brightness, 0.7);
 
 // Density: 0 (few voices/open) → 1 (many voices/clustered)
 ~setParam.(\density, 0.4);
