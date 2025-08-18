@@ -37,6 +37,7 @@ rhythmicity from fluid/free to rhythmic/structured -> pulse emphasis
 };
 
 ~parameterMappings = (
+	crushMix:     { ~mapLin.(~parameters[\warmth],      0, 1, 0.25, 0.05) },
 	darkPadSub:   { ~mapLin.(~parameters[\warmth],      0, 1, 0.2, 0.8) },
 	distAmt:      { ~mapLin.(~parameters[\warmth],      0, 1, 0.25, 0.05) },
 	droneDetune:  { ~mapLin.(~parameters[\warmth],      0, 1, 0.01, 0.05) },
@@ -137,7 +138,7 @@ SynthDef(\padSynth, { |freq = 440, amp = 0.2, gate = 1, pan = 0, atk = 2.0, rel 
 )
 
 (
-SynthDef(\darkPad, { |out=0, freq=220, amp=0.1, norm = 0.3, ffreq=1000, darkPadSub=0.5, darkPadBits=8, drive=0.1, distAmt=0.1, gate=1, atk=4, rel=8, rq=0.4, revMix=0.2|
+SynthDef(\darkPad, { |out=0, freq=220, amp=0.1, norm = 0.3, ffreq=1000, darkPadSub=0.5, darkPadBits=8, crushMix=0.3, drive=0.1, distAmt=0.1, gate=1, atk=4, rel=8, rq=0.4, revMix=0.2|
     var osc, sub, mix, lfo, env, filt, dist, crush, chorus, rev;
 
     // 2 saws slightly detuned (already thick enough)
@@ -153,13 +154,15 @@ SynthDef(\darkPad, { |out=0, freq=220, amp=0.1, norm = 0.3, ffreq=1000, darkPadS
     lfo = SinOsc.kr(0.03).range(0.4, 1.2);
 
     // dark low-pass filter (base cutoff not tied to pitch)
-    filt = RLPF.ar(mix, (ffreq * lfo).clip(80, 2000), rq);
+    filt = RLPF.ar(mix, (ffreq * lfo).clip(100, 2000), rq);
 
     // distortion: waveshaper for nasty harmonics
-    dist = tanh(filt * (1 + drive * 10)) + (filt * distAmt).clip2;
+    dist = XFade2.ar(tanh(filt * (1 + drive * 10)), filt.clip2, distAmt * 2 - 1);
+	dist = HPF.ar(dist, 80); // clean up mud
+
 
     // bitcrush for extra electronic grit
-    crush = Decimator.ar(dist, 44100, darkPadBits); // bit resolution
+    crush = XFade2.ar(dist, Decimator.ar(dist, 44100, darkPadBits), crushMix * 2 - 1); // bit resolution
 
     // stereo spread / chorus
     chorus = Splay.ar([
@@ -172,6 +175,8 @@ SynthDef(\darkPad, { |out=0, freq=220, amp=0.1, norm = 0.3, ffreq=1000, darkPadS
 
     // optional dark reverb tail
     rev = FreeVerb.ar(chorus * env, mix: revMix, room: 0.7, damp: 0.3);
+	rev = HPF.ar(rev, 80);
+
 
     Out.ar(out, rev * amp);
 }).add;
@@ -1368,6 +1373,7 @@ Pdef(\ambgen,
 					\legato,      ~getMapped.(\legato),
 					\darkPadSub,  ~getMapped.(\darkPadSub),
 					\distAmt,     ~getMapped.(\distAmt),
+					\crushMix,    ~getMapped.(\crushMix),
                     \modRate,     ~getMapped.(\modRate),
 					\ffreq,       ~getMapped.(\darkPadCutoff),
 					\darkPadBits, ~getMapped.(\darkPadBits),
@@ -1549,6 +1555,7 @@ Pbind(
 	\legato,      ~getMapped.(\legato),
 	\darkPadSub,  ~getMapped.(\darkPadSub),
 	\distAmt,     ~getMapped.(\distAmt),
+	\crushMix,    ~getMapped.(\crushMix),
 	\modRate,     ~getMapped.(\modRate),
 	\ffreq,       ~getMapped.(\darkPadCutoff),
 	\darkPadBits, ~getMapped.(\darkPadBits),
