@@ -39,7 +39,7 @@ rhythmicity from fluid/free to rhythmic/structured -> pulse emphasis
 ~parameterMappings = (
 	darkPadSub:   { ~mapLin.(~parameters[\warmth],      0, 1, 0.2, 0.8) },
 	distAmt:      { ~mapLin.(~parameters[\warmth],      0, 1, 0.25, 0.05) },
-	droneDetune:  { ~mapLin.(~parameters[\warmth],      0, 1, 0.01, 0.15) },
+	droneDetune:  { ~mapLin.(~parameters[\warmth],      0, 1, 0.01, 0.05) },
 	detune:       { ~mapLin.(~parameters[\warmth],      0, 1, 0.0, 0.05) },
 	drive:        { ~mapLin.(~parameters[\warmth],      0, 1, 0.05, 0.5) },
 	humLevel:     { ~mapLin.(~parameters[\warmth],      0, 1, 0.0, 0.05) },
@@ -212,22 +212,24 @@ SynthDef(\bassSynth, {
 (
 SynthDef(\droneSynth, {
     |out=0, freq=55, amp=0.2, pan=0, gate=1,
-     droneDetune=0.1, lfoRate=0.05, lfoDepth=0.2,
+     droneDetune=0.1, lfoRate=0.05, lfoDepth=0.01,
      ffreq=800, rq=0.3, revMix=0.4|
 
-    var osc, detuned, lfo, filt, env, rev, snd, mid, side, stereo;
+	var osc, detuneFactors, detuned, lfo, filt, env, rev, snd, mid, side, stereo;
 
-    // multiple detuned saws → fat texture
-    detuned = Mix.fill(4, { |i|
-        Saw.ar(freq * (1 + LFNoise1.kr(0.1).range(1 - droneDetune, droneDetune)))
-    });
+	// store the multipliers first
+	detuneFactors = Array.fill(4, { LFNoise1.kr(0.1).range(1 - droneDetune, 1 + droneDetune) });
 
-    // slow LFO for movement (amplitude + subtle freq wobble)
-    lfo = SinOsc.kr(lfoRate).range(1 - lfoDepth, 1 + lfoDepth);
-    osc = detuned * lfo;
+	// now make the oscillators
+	detuned = Mix.fill(4, { |i| Saw.ar(freq * detuneFactors[i])});
+
+	// detuneFactors.do { |df, i| Poll.kr(Impulse.kr(1), df, "Drone detune factor " ++ i)};
+
+	// slow LFO for movement (amplitude + subtle freq wobble)
+	lfo = SinOsc.kr(lfoRate).range(1 - lfoDepth, 1 + lfoDepth);
 
     // resonant lowpass → shaping brightness
-    filt = RLPF.ar(osc, ffreq * (1 + LFNoise1.kr(0.05, 0.3)), rq);
+    filt = RLPF.ar(detuned, ffreq * lfo, rq);
 
     // long envelope (ASR)
     env = EnvGen.kr(Env.asr(5, 1, 10), gate, doneAction:2);
@@ -1373,7 +1375,7 @@ Pdef(\ambgen,
                     \atk,         ~getMapped.(\atk),
                     \rel,         ~getMapped.(\rel),
                     \rq,          ~getMapped.(\rq),
-                    \amp,         ~getAmpForVoices.(chord.size) * 0.5
+                    \amp,         ~getAmpForVoices.(chord.size) * 0.3
                 ]));
             };
 
@@ -1387,12 +1389,12 @@ Pdef(\ambgen,
                 \drive,  ~getMapped.(\drive),
                 \atk,    ~getMapped.(\atk),
                 \rel,    ~getMapped.(\rel),
-                \amp,    ~getMapped.(\bassAmp) * 0.5
+                \amp,    ~getMapped.(\bassAmp) * 0.2
             ]));
 
 			// spawn drone
 			droneSynths.add(Synth(\droneSynth, [
-				\freq, ~getDroneNote.(~droneDegrees.choose, -1).midicps,  // degree, octave shift
+				\freq, ~getDroneNote.(~droneDegrees.choose, 2).midicps,  // degree, octave shift
 				\droneDetune,  ~getMapped.(\droneDetune),
 				\lfoRate, ~getMapped.(\droneLfoRate),
 				\ffreq,   ~getMapped.(\filterCutoff),
@@ -1410,7 +1412,7 @@ Pdef(\ambgen,
 					\decay, Pwhite(2, 5, inf),
 					\pan, Pwhite(-0.6, 0.6, inf),
 					\revMix, ~getMapped.(\revMix),
-					\amp, ~getMapped.(\harpAmp)
+					\amp, ~getMapped.(\harpAmp) * 0.7
 				)
 			);
 
@@ -1558,6 +1560,20 @@ Pbind(
 ).play;
 )
 
+(
+// simple test Pbind for darkPad
+Pbind(
+	\instrument, \droneSynth,
+	\freq, ~getDroneNote.(~droneDegrees.choose, -1).midicps,  // degree, octave shift
+	\droneDetune,  ~getMapped.(\droneDetune),
+	\lfoRate, ~getMapped.(\droneLfoRate),
+	\ffreq,   ~getMapped.(\filterCutoff),
+	\rq,      ~getMapped.(\rq),
+	\revMix,  ~getMapped.(\revMix) * 1.2,
+	\amp,     ~getMapped.(\droneAmp),
+	\pan,     rrand(-0.5, 0.5)
+).play;
+)
 
 
 
