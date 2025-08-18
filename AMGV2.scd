@@ -37,7 +37,8 @@ rhythmicity from fluid/free to rhythmic/structured -> pulse emphasis
 };
 
 ~parameterMappings = (
-	detune:       { ~mapLin.(~parameters[\warmth],      0, 1, 0.0, 0.1) },
+	droneDetune:  { ~mapLin.(~parameters[\warmth], 0, 1, 0.01, 0.15) },
+	detune:       { ~mapLin.(~parameters[\warmth],      0, 1, 0.0, 0.05) },
 	drive:        { ~mapLin.(~parameters[\warmth],      0, 1, 0.05, 0.5) },
 	humLevel:     { ~mapLin.(~parameters[\warmth],      0, 1, 0.0, 0.05) },
 	lpfFactor:    { ~mapLin.(~parameters[\warmth],      0, 1, 3, 12) },
@@ -49,14 +50,16 @@ rhythmicity from fluid/free to rhythmic/structured -> pulse emphasis
 	sub:          { ~mapLin.(~parameters[\warmth],      0, 1, 0.5, 1.0) },
 	filterCutoff: { ~mapExp.(~parameters[\brightness],  0, 1, 1000, 10000) },
 	rq:           { ~mapLin.(~parameters[\brightness],  0, 1, 0.9, 0.1)},
+	droneLfoRate: { ~mapLin.(~parameters[\variability], 0, 1, 0.01, 0.1) },
 	dur:          { ~mapLin.(~parameters[\variability], 0, 1, 16, 8).round.asInteger},
-	revMix:       { ~mapLin.(~parameters[\variability], 0, 1, 0.3, 0.6) },
+	revMix:       { ~mapLin.(~parameters[\variability], 0, 1, 0.3, 0.5) },
 	atk:          { ~mapExp.(1 - ~parameters[\rhythmicity], 0, 1, 0.2, 2) },
 	legato:       { ~mapLin.(~parameters[\rhythmicity], 0, 1, 1, 0.95) },
 	pulseDiv:     { ~mapLin.(~parameters[\rhythmicity], 0, 1, 1, 4).round.asInteger },
     rel:          { ~mapLin.(~parameters[\rhythmicity], 0, 1, 4, 1.0) },
 	bassAmp:      { ~mapExp.(~parameters[\density],     0, 1, 0.1, 0.2) },
 	bellAmp:      { ~mapExp.(~parameters[\density],     0, 1, 0.05, 0.1) },
+	droneAmp:     { ~mapExp.(~parameters[\density],     0, 1, 0.05, 0.2) },
 	harpAmp:      { ~mapExp.(~parameters[\density],     0, 1, 0.5, 1) },
 	norm:         { ~mapExp.(~parameters[\density],     0, 1, 0.01, 0.05) },
 	texAmp:       { ~mapExp.(~parameters[\density],     0, 1, 0.2, 0.3) },
@@ -157,6 +160,50 @@ SynthDef(\bassSynth, {
     Out.ar(0, Pan2.ar(filt * env * amp, pan));
 }).add;
 )
+
+
+// --- Drone Synth ---
+
+(
+SynthDef(\droneSynth, {
+    |out=0, freq=55, amp=0.2, pan=0, gate=1,
+     droneDetune=0.1, lfoRate=0.05, lfoDepth=0.2,
+     ffreq=800, rq=0.3, revMix=0.4|
+
+    var osc, detuned, lfo, filt, env, rev, snd, mid, side, stereo;
+
+    // multiple detuned saws → fat texture
+    detuned = Mix.fill(4, { |i|
+        Saw.ar(freq * (1 + LFNoise1.kr(0.1).range(1 - droneDetune, droneDetune)))
+    });
+
+    // slow LFO for movement (amplitude + subtle freq wobble)
+    lfo = SinOsc.kr(lfoRate).range(1 - lfoDepth, 1 + lfoDepth);
+    osc = detuned * lfo;
+
+    // resonant lowpass → shaping brightness
+    filt = RLPF.ar(osc, ffreq * (1 + LFNoise1.kr(0.05, 0.3)), rq);
+
+    // long envelope (ASR)
+    env = EnvGen.kr(Env.asr(5, 1, 10), gate, doneAction:2);
+
+    // space
+    rev = FreeVerb.ar(filt, mix: revMix, room: 0.9, damp: 0.7);
+
+    // Haas trick
+    stereo = [rev * 0.7, DelayC.ar(rev, 0.02, 0.005)];
+
+    // Mid/Side encode
+    mid  = (stereo[0] + stereo[1]) * 0.5;
+    side = (stereo[0] - stereo[1]) * 0.5;
+
+    // no mid
+    stereo = [side, 1 - side];
+
+    Out.ar(out, stereo * env * amp);
+}).add;
+)
+
 
 // --- Harp Synth ---
 
@@ -357,6 +404,16 @@ SynthDef(\vinylCrackle, {
     ~ensureScaleAndKey.();
     ~scalePcs.collect { |interval| ~keyMidi + interval }
 };
+
+// Set the drone note
+(
+~getDroneNote = { |degree=2, octaveShift=3|
+    ~ensureScaleAndKey.();
+    var scale = ~scaleToMidi.();
+    var note = scale.wrapAt(degree - 1); // pick scale degree
+    note + (12 * octaveShift)            // shift if needed
+};
+)
 
 // Build a chord by weighted selection (now reacts to variability)
 ~weightedChord = { |degree|
@@ -887,7 +944,6 @@ SynthDef(\vinylCrackle, {
 };
 )
 
-(~genDurations.(8.4))
 
 // --- Pdef with probabilistic chord selection ---
 
@@ -948,6 +1004,7 @@ Pdef(\ambgen,
     Pspawner { |sp|
         var padSynths = List[];
         var bassSynths = List[];
+		var droneSynths = List[];
         var chord, dur, subdiv, idx, durations, padFreqs, padPans, bassFreq, chordStartBeat;
 
 		sp.par(~vinylPattern);
@@ -962,10 +1019,10 @@ Pdef(\ambgen,
             // stop old synths
             padSynths.do { |s| s.set(\gate, 0) };
             bassSynths.do { |s| s.set(\gate, 0) };
-			// harpSynths.do { |s| s.set(\gate, 0) };
+			droneSynths.do { |s| s.set(\gate, 0) };
             padSynths.clear;
             bassSynths.clear;
-			// harpSynths.clear;
+			droneSynths.clear;
 
             // precompute pad params
             padFreqs = {
@@ -1026,6 +1083,18 @@ Pdef(\ambgen,
                 \amp,    ~getMapped.(\bassAmp)
             ]));
 
+			// spawn drone
+			droneSynths.add(Synth(\droneSynth, [
+				\freq, bassFreq * 16,   // root + 4 octaves
+				\droneDetune,  ~getMapped.(\droneDetune),
+				\lfoRate, ~getMapped.(\droneLfoRate),
+				\ffreq,   ~getMapped.(\filterCutoff),
+				\rq,      ~getMapped.(\rq),
+				\revMix,  ~getMapped.(\revMix) * 2,
+				\amp,     ~getMapped.(\droneAmp) * 2,
+				\pan,     rrand(-0.5, 0.5)
+			]));
+
 			sp.par(
 				Pbind(
 					\instrument, \harpPluck,
@@ -1073,7 +1142,6 @@ Pdef(\ambgen,
 				)
 			);
 
-
 			// run sea & vinyl in parallel
 			sp.par(Pbindf(~seaPattern));
 
@@ -1085,16 +1153,9 @@ Pdef(\ambgen,
 
 
 // Test Pdef
-(
-Pdef(\bell,
-    Pbind(
-        \instrument, \bell,
-        \freq, 220,
-        \dur, 1,
-        \amp, 0.1,
-    )
-).play;
-)
+x = Synth(\droneSynth, [\freq, 880, \amp, 0.2]); // start drone
+x.set(\gate, 0); // stop drone when you’re done
+
 
 // --- Routine to change scales ---
 
@@ -1119,7 +1180,7 @@ Routine({
 
 // Define key and scale
 ~setKey.(\C, 4);
-~setScale.(\ionian);
+~setScale.(\dorian);
 
 // Check scale, key and chord
 ~scalePcs.postln;     // Should be [0,2,4,5,7,9,11] for ionian
