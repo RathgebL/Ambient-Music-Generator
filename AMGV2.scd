@@ -52,7 +52,7 @@ rhythmicity from fluid/free to rhythmic/structured -> pulse emphasis
 	rumbleLevel:  { ~mapLin.(~parameters[\warmth],      0, 1, 0.0, 0.2) },
 	sub:          { ~mapLin.(~parameters[\warmth],      0, 1, 0.5, 1.0) },
 	darkPadCutoff:{ ~mapExp.(~parameters[\brightness],  0, 1, 200, 2000) },
-	filterCutoff: { ~mapExp.(~parameters[\brightness],  0, 1, 3000, 10000) },
+	filterCutoff: { ~mapExp.(~parameters[\brightness],  0, 1, 2000, 8000) },
 	rq:           { ~mapLin.(~parameters[\brightness],  0, 1, 2, 0.5)},
 	darkPadBits:  { ~mapLin.(~parameters[\variability], 0, 1, 4, 6).round.asInteger },
 	droneLfoRate: { ~mapLin.(~parameters[\variability], 0, 1, 0.01, 0.1) },
@@ -63,7 +63,7 @@ rhythmicity from fluid/free to rhythmic/structured -> pulse emphasis
 	pulseDiv:     { ~mapLin.(~parameters[\rhythmicity], 0, 1, 1, 4).round.asInteger },
     rel:          { ~mapLin.(~parameters[\rhythmicity], 0, 1, 4, 1.0) },
 	bassAmp:      { ~mapExp.(~parameters[\density],     0, 1, 0.1, 0.2) },
-	bellAmp:      { ~mapExp.(~parameters[\density],     0, 1, 0.05, 0.25) },
+	bellAmp:      { ~mapExp.(~parameters[\density],     0, 1, 0.1, 0.5) },
 	droneAmp:     { ~mapExp.(~parameters[\density],     0, 1, 0.05, 0.2) },
 	harpAmp:      { ~mapExp.(~parameters[\density],     0, 1, 0.5, 1) },
 	norm:         { ~mapExp.(~parameters[\density],     0, 1, 0.01, 0.05) },
@@ -311,9 +311,9 @@ SynthDef(\bell, { |out=0, freq=220, amp=0.3, pan=0, gate=1, lpfFactor=2, revMix=
     env = EnvGen.kr(Env.asr(0.01, 1, 6, curve: -10), gate, doneAction:2);
 
     // inharmonic partial ratios (bell-like spectra)
-    freqs = freq * [1, 2, 2.73, 3.01, 4.05, 4.97, 6.01]; // slightly weird ratios
-    amps   = [1.0, 0.5, 0.03, 0.2, 0.15, 0.1, 0.05];     // balance of partials
-    decays = [6,   2,   0.3,   1,   0.5, 1, 0.7];        // longer ring for low partials
+    freqs = freq * [0.5, 0.66, 1   , 2   , 2.73, 3.01, 4.05, 4.97, 6.01, 7.32]; // slightly weird ratios
+    amps   =       [0.7, 0.5 , 1.0 , 0.5 , 0.03, 0.2 , 0.15, 0.1 , 0.05, 0.03]; // balance of partials
+    decays =       [3  , 2   , 6   , 2   , 0.4 , 1   , 0.5 , 1   , 0.7 , 0.6 ]; // longer ring for low partials
 
     // sum partials with individual decays
     partials = Mix.fill(freqs.size, { |i|
@@ -1583,7 +1583,6 @@ Pbind(
 )
 
 
-
 // --- Usage & Checks ---
 
 // Define key and scale
@@ -1613,7 +1612,7 @@ Pbind(
 ~setParam.(\variability, 0.5);
 
 // Rhythmicity: 0 (smooth/legato) → 1 (tight/rhythmic)
-~setParam.(\rhythmicity, 0.5);
+~setParam.(\rhythmicity, 0.3);
 
 ~parameters.postln;
 
