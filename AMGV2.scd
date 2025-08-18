@@ -67,8 +67,10 @@ rhythmicity from fluid/free to rhythmic/structured -> pulse emphasis
 	bellAmp:      { ~mapExp.(~parameters[\density],     0, 1, 0.1, 0.5) },
 	droneAmp:     { ~mapExp.(~parameters[\density],     0, 1, 0.05, 0.2) },
 	harpAmp:      { ~mapExp.(~parameters[\density],     0, 1, 0.5, 1) },
+	noiseAmp:     { ~mapExp.(~parameters[\density],     0, 1, 0.5, 1) },
 	norm:         { ~mapExp.(~parameters[\density],     0, 1, 0.01, 0.05) },
-	texAmp:       { ~mapExp.(~parameters[\density],     0, 1, 0.2, 0.3) },
+	seaAmp:       { ~mapExp.(~parameters[\density],     0, 1, 0.2, 0.3) },
+	rainAmp:      { ~mapExp.(~parameters[\density],     0, 1, 0.5, 1) },
 	numVoices:    {
 		var raw =   ~mapLin.(~parameters[\density],         0, 1, 1, 9).round.asInteger;
 		if(raw.even) { raw = raw + 1 }; // ensure odd
@@ -385,10 +387,11 @@ SynthDef(\bell, { |out=0, freq=220, amp=0.3, pan=0, gate=1, lpfFactor=2, revMix=
 )
 
 
-// --- Textrure Synth ---
+// --- Textrure Synths ---
+
 (
 // Sea like texture
-SynthDef(\textureSynth, {
+SynthDef(\seaSynth, {
     |amp = 0.1, ffreq = 1000, rq = 0.3,
      modRate = 0.05, modDepth = 300, pan = 0,
      pinkAmt = 0.5, whiteAmt = 0.5, revMix = 0.5,
@@ -439,7 +442,7 @@ SynthDef(\vinylCrackle, {
     env = EnvGen.kr(Env.perc(0.001, grainRel), trig) * grainAmp;
     src = PinkNoise.ar(amp) * env;
     filtered = HPF.ar(LPF.ar(src, lpFreq), hpFreq);
-    saturated = (filtered * 5).tanh;
+	saturated = tanh(filtered * 5);
 
     // --- Mechanical rumble (low brown noise) ---
     rumble = LPF.ar(BrownNoise.ar(rumbleLevel), rumbleFreq);
@@ -454,6 +457,50 @@ SynthDef(\vinylCrackle, {
     mix = (saturated + rumble + hum) * wow;
     panned = Pan2.ar(mix, LFNoise1.kr(5).range(-0.5, 0.5));
     Out.ar(out, panned);
+}).add;
+)
+
+// Rain sound
+(
+SynthDef(\rainTexture, { |out=0, amp=0.2,
+    densFactor= 1, hp=400, lp=6000,
+    revMix=0.25, rq=0.3, noiseAmp=0.3|
+
+    var trigNear, trigFar, nearDrops, farDrops, noiseBed, rain, rev, densNear, densFar;
+
+	densNear = 10 * densFactor;
+	densFar  = 100 * densFactor;
+
+    // 1. NEARBY drops (louder, fewer)
+    trigNear = Dust.kr(densNear); // sparser
+    nearDrops = Decay2.kr(trigNear, 0.001, TRand.kr(0.05, 0.15, trigNear)) * PinkNoise.ar(0.6);
+    nearDrops = BPF.ar(nearDrops,TExpRand.kr(700, 1500, trigNear), 0.5);
+
+	// Pan hardish sides
+    nearDrops = Pan2.ar(nearDrops, Select.kr(TRand.kr(0,1,trigNear).round, [TRand.kr(-1.0, -0.6, trigNear), TRand.kr(0.6, 1.0, trigNear)]));
+
+    // 2. FAR drops (many, quieter)
+    trigFar = Dust.kr(densFar); // denser
+    farDrops = Decay2.kr(trigFar, 0.002, TRand.kr(0.05, 0.1, trigFar)) * BrownNoise.ar(0.3);
+    farDrops = BPF.ar(farDrops, TExpRand.kr(2000, 3000, trigFar), 0.4);
+
+	// Spread narrower, closer to center
+    farDrops = Pan2.ar(farDrops, TRand.kr(-0.6, 0.6, trigFar));
+
+    // 3. Background noise "rain sheet"
+    noiseBed = WhiteNoise.ar(0.2) * 0.5
+             + PinkNoise.ar(0.2)  * 0.3
+             + BrownNoise.ar(0.2) * 0.2;
+    noiseBed = HPF.ar(LPF.ar(noiseBed, lp), hp) * noiseAmp;
+    noiseBed = Splay.ar(noiseBed, 0.3); // stereo spread
+
+    // Mix all layers
+    rain = nearDrops + farDrops + noiseBed;
+
+    // Reverb for space
+    rev = FreeVerb.ar(rain, mix: 0.2, room: 0.9, damp: 0.9);
+
+    Out.ar(out, rev * amp);
 }).add;
 )
 
@@ -1281,7 +1328,7 @@ SynthDef(\vinylCrackle, {
 
 (
 ~seaPattern = Pbind(
-    \instrument, \textureSynth,
+    \instrument, \seaSynth,
 	\legato, Pwhite(0.97,1.03),
 
     // time between waves, in beats
@@ -1314,7 +1361,7 @@ SynthDef(\vinylCrackle, {
     \waveDepth, Pfunc({ ~mapLin.(~parameters[\density], 0, 1, 0.1, 0.6) }),
     \waveRate,  Pfunc({ ~mapLin.(~parameters[\variability], 0, 1, 0.02, 0.08) }),
     \pan,       Pwhite(-1.0, 1.0),
-    \amp,       Pfunc({ ~getMapped.(\texAmp) * 0.0001})
+    \amp,       Pfunc({ ~getMapped.(\seaAmp) * 0.0001})
 );
 
 ~vinylPattern = Pmono(
@@ -1328,9 +1375,18 @@ SynthDef(\vinylCrackle, {
     \hpFreq,      Pwhite(500, 1500),
 	\humLevel,    Pfunc({ ~getMapped.(\humLevel) }),
     \rumbleLevel, Pfunc({ ~getMapped.(\rumbleLevel) }),
-    \amp, Pfunc({ ~getMapped.(\texAmp) } * 0.0001)
+    \amp, Pfunc({ ~getMapped.(\seaAmp) } * 0.0001)
 );
 
+~rainPattern = Pmono(
+    \rainTexture,
+    \dur, Pfunc({ ~getMapped.(\dur) }),   // update every cycle
+    \densFactor, Pfunc({ ~mapLin.(~parameters[\variability], 0, 1, 1, 2) }),
+    \highpass, Pfunc({ ~mapLin.(~parameters[\brightness], 0, 1, 200, 2000) }),
+    \lowpass,  Pfunc({ ~mapLin.(~parameters[\brightness], 0, 1, 3000, 8000) }),
+    \revMix,   Pfunc({ ~getMapped.(\revMix) * 0.7 }),
+    \amp,      Pfunc({ ~getMapped.(\rainAmp) * 1 })
+);
 
 Pdef(\ambgen,
     Pspawner { |sp|
@@ -1340,7 +1396,9 @@ Pdef(\ambgen,
 		var droneSynths = List[];
         var chord, dur, subdiv, idx, durations, padFreqs, padPans, bassFreq, chordStartBeat;
 
+		// Background layers
 		sp.par(~vinylPattern);
+		sp.par(~rainPattern);
 
         loop {
             chord = ~nextChord.();
@@ -1666,8 +1724,18 @@ Pbind(
     \pan, Pwhite(-0.6, 0.6, inf)   // stereo movement
 ).play;
 )
-
-
+(
+Pbind(
+    \instrument, \rainTexture,
+    \dur, 100,                 // long event, constant rain
+    \dens,  Pseq([200, 400, 600,300], inf),  // drizzle → medium → heavier
+    \hp,    300,             // cut low rumble
+    \lp,    6000,            // keep highs
+    \revMix, 0.3,
+	\noiseAmp, 0.5,
+    \amp,   0.4
+).play;
+)
 
 // --- Usage & Checks ---
 
@@ -1692,7 +1760,7 @@ Pbind(
 ~setParam.(\brightness, 0.7);
 
 // Density: 0 (few voices/open) → 1 (many voices/clustered)
-~setParam.(\density, 0.4);
+~setParam.(\density, 0.9);
 
 // Variability: 0 (slow/static) → 1 (fast/changing)
 ~setParam.(\variability, 0.5);
