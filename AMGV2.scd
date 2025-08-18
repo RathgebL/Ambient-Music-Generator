@@ -37,7 +37,9 @@ rhythmicity from fluid/free to rhythmic/structured -> pulse emphasis
 };
 
 ~parameterMappings = (
-	droneDetune:  { ~mapLin.(~parameters[\warmth], 0, 1, 0.01, 0.15) },
+	darkPadSub:   { ~mapLin.(~parameters[\warmth],      0, 1, 0.2, 0.8) },
+	distAmt:      { ~mapLin.(~parameters[\warmth],      0, 1, 0.25, 0.05) },
+	droneDetune:  { ~mapLin.(~parameters[\warmth],      0, 1, 0.01, 0.15) },
 	detune:       { ~mapLin.(~parameters[\warmth],      0, 1, 0.0, 0.05) },
 	drive:        { ~mapLin.(~parameters[\warmth],      0, 1, 0.05, 0.5) },
 	humLevel:     { ~mapLin.(~parameters[\warmth],      0, 1, 0.0, 0.05) },
@@ -48,17 +50,19 @@ rhythmicity from fluid/free to rhythmic/structured -> pulse emphasis
 	revDamp:      { ~mapLin.(~parameters[\warmth],      0, 1, 0.2, 0.8) },
 	rumbleLevel:  { ~mapLin.(~parameters[\warmth],      0, 1, 0.0, 0.2) },
 	sub:          { ~mapLin.(~parameters[\warmth],      0, 1, 0.5, 1.0) },
+	darkPadCutoff:{ ~mapExp.(~parameters[\brightness],  0, 1, 200, 2000) },
 	filterCutoff: { ~mapExp.(~parameters[\brightness],  0, 1, 3000, 10000) },
 	rq:           { ~mapLin.(~parameters[\brightness],  0, 1, 2, 0.5)},
+	darkPadBits:  { ~mapLin.(~parameters[\variability], 0, 1, 4, 6).round.asInteger },
 	droneLfoRate: { ~mapLin.(~parameters[\variability], 0, 1, 0.01, 0.1) },
-	dur:          { ~mapLin.(~parameters[\variability], 0, 1, 16, 8).round.asInteger},
+	dur:          { ~mapLin.(~parameters[\variability], 0, 1, 16, 8).round.asInteger },
 	revMix:       { ~mapLin.(~parameters[\variability], 0, 1, 0.3, 0.5) },
 	atk:          { ~mapExp.(1 - ~parameters[\rhythmicity], 0, 1, 0.2, 2) },
 	legato:       { ~mapLin.(~parameters[\rhythmicity], 0, 1, 1, 0.95) },
 	pulseDiv:     { ~mapLin.(~parameters[\rhythmicity], 0, 1, 1, 4).round.asInteger },
     rel:          { ~mapLin.(~parameters[\rhythmicity], 0, 1, 4, 1.0) },
 	bassAmp:      { ~mapExp.(~parameters[\density],     0, 1, 0.1, 0.2) },
-	bellAmp:      { ~mapExp.(~parameters[\density],     0, 1, 0.05, 0.1) },
+	bellAmp:      { ~mapExp.(~parameters[\density],     0, 1, 0.05, 0.25) },
 	droneAmp:     { ~mapExp.(~parameters[\density],     0, 1, 0.05, 0.2) },
 	harpAmp:      { ~mapExp.(~parameters[\density],     0, 1, 0.5, 1) },
 	norm:         { ~mapExp.(~parameters[\density],     0, 1, 0.01, 0.05) },
@@ -133,34 +137,43 @@ SynthDef(\padSynth, { |freq = 440, amp = 0.2, gate = 1, pan = 0, atk = 2.0, rel 
 )
 
 (
-SynthDef(\darkPad, { |out=0, freq=220, amp=0.2, atk=4, rel=8, detune=0.07, rq=0.3, gate=1|
-    var osc, mix, lfo, env, filt, dist, chorus;
+SynthDef(\darkPad, { |out=0, freq=220, amp=0.1, norm = 0.3, ffreq=1000, darkPadSub=0.5, darkPadBits=8, drive=0.1, distAmt=0.1, gate=1, atk=4, rel=8, rq=0.4, revMix=0.2|
+    var osc, sub, mix, lfo, env, filt, dist, crush, chorus, rev;
 
-    // 3 slightly detuned saws
-    osc = Saw.ar(freq);
+    // 2 saws slightly detuned (already thick enough)
+    osc = Saw.ar(freq) * norm;
 
-    // Mix them
-    mix = Mix(osc) * 0.3;
+    // add a deep sub layer (square or sine one octave down)
+    sub = Pulse.ar(freq/2, 0.4) * darkPadSub;
 
-    // Gentle LFO to move cutoff (slowly evolving)
-    lfo = SinOsc.kr(0.05).range(0.5, 1.5);
+    // mix and balance
+    mix = Mix([osc, sub]) * 0.3;
 
-    // Filter
-    filt = RLPF.ar(mix, freq * lfo * 2, rq);
+    // slow LFO for cutoff movement
+    lfo = SinOsc.kr(0.03).range(0.4, 1.2);
 
-    // Distortion (tanh is warm & dark)
-    dist = tanh(filt * 3);
+    // dark low-pass filter (base cutoff not tied to pitch)
+    filt = RLPF.ar(mix, (ffreq * lfo).clip(80, 2000), rq);
 
-    // Add slow chorus / stereo widening
+    // distortion: waveshaper for nasty harmonics
+    dist = tanh(filt * (1 + drive * 10)) + (filt * distAmt).clip2;
+
+    // bitcrush for extra electronic grit
+    crush = Decimator.ar(dist, 44100, darkPadBits); // bit resolution
+
+    // stereo spread / chorus
     chorus = Splay.ar([
-        DelayC.ar(dist, 0.03, LFNoise1.kr(0.1).range(0.001, 0.02)),
-        DelayC.ar(dist, 0.03, LFNoise1.kr(0.1).range(0.001, 0.02))
-    ], spread: 0.7);
+        DelayC.ar(crush, 0.03, LFNoise1.kr(0.15).range(0.001, 0.02)),
+        DelayC.ar(crush, 0.03, LFNoise1.kr(0.15).range(0.002, 0.025))
+    ], spread: 0.8);
 
-    // Envelope
+    // envelope
     env = EnvGen.kr(Env.asr(atk, 1, rel), gate, doneAction: 2);
 
-    Out.ar(out, chorus * env * amp);
+    // optional dark reverb tail
+    rev = FreeVerb.ar(chorus * env, mix: revMix, room: 0.7, damp: 0.3);
+
+    Out.ar(out, rev * amp);
 }).add;
 )
 
@@ -712,7 +725,7 @@ SynthDef(\vinylCrackle, {
 
 // Function to get amp for current chord size
 ~getAmpForVoices = { |numVoices|
-    ~ampLevels[numVoices] ? 0.1 // fallback if somehow outside 2..6
+    ~ampLevels[numVoices] * 0.7 ? 0.1 // fallback if somehow outside 2..6
 };
 
 // --- Markov second order harmony (degrees 1..7) ---
@@ -1246,7 +1259,7 @@ SynthDef(\vinylCrackle, {
     \waveDepth, Pfunc({ ~mapLin.(~parameters[\density], 0, 1, 0.1, 0.6) }),
     \waveRate,  Pfunc({ ~mapLin.(~parameters[\variability], 0, 1, 0.02, 0.08) }),
     \pan,       Pwhite(-1.0, 1.0),
-    \amp,       Pfunc({ ~getMapped.(\texAmp) })
+    \amp,       Pfunc({ ~getMapped.(\texAmp) * 0.0001})
 );
 
 ~vinylPattern = Pmono(
@@ -1260,7 +1273,7 @@ SynthDef(\vinylCrackle, {
     \hpFreq,      Pwhite(500, 1500),
 	\humLevel,    Pfunc({ ~getMapped.(\humLevel) }),
     \rumbleLevel, Pfunc({ ~getMapped.(\rumbleLevel) }),
-    \amp, Pfunc({ ~getMapped.(\texAmp) } )
+    \amp, Pfunc({ ~getMapped.(\texAmp) } * 0.0001)
 );
 
 
@@ -1341,23 +1354,26 @@ Pdef(\ambgen,
                     \atk,     ~getMapped.(\atk),
                     \rel,     ~getMapped.(\rel),
                     \rq,      ~getMapped.(\rq),
-                    \amp,     ~getAmpForVoices.(chord.size) * 0.4
+					\amp,     ~getAmpForVoices.(chord.size) * 0.005
                 ]));
             };
 
 			// spawn pad voices
             padFreqs.do { |f, i|
                 darkPadSynths.add(Synth(\darkPad, [
-                    \freq, f,
+                    \freq, f * 0.5, // one octave lower
                     \pan, padPans[i],
-					\legato,  ~getMapped.(\legato),
-                    \modRate, ~getMapped.(\modRate),
-                    \ffreq,   ~getMapped.(\filterCutoff),
-                    \revMix,  ~getMapped.(\revMix) * 0.7,
-                    \atk,     ~getMapped.(\atk),
-                    \rel,     ~getMapped.(\rel),
-                    \rq,      ~getMapped.(\rq),
-                    \amp,     ~getAmpForVoices.(chord.size) * 0.4
+					\legato,      ~getMapped.(\legato),
+					\darkPadSub,  ~getMapped.(\darkPadSub),
+					\distAmt,     ~getMapped.(\distAmt),
+                    \modRate,     ~getMapped.(\modRate),
+					\ffreq,       ~getMapped.(\darkPadCutoff),
+					\darkPadBits, ~getMapped.(\darkPadBits),
+                    \revMix,      ~getMapped.(\revMix) * 0.7,
+                    \atk,         ~getMapped.(\atk),
+                    \rel,         ~getMapped.(\rel),
+                    \rq,          ~getMapped.(\rq),
+                    \amp,         ~getAmpForVoices.(chord.size) * 0.5
                 ]));
             };
 
@@ -1371,18 +1387,18 @@ Pdef(\ambgen,
                 \drive,  ~getMapped.(\drive),
                 \atk,    ~getMapped.(\atk),
                 \rel,    ~getMapped.(\rel),
-                \amp,    ~getMapped.(\bassAmp)
+                \amp,    ~getMapped.(\bassAmp) * 0.5
             ]));
 
 			// spawn drone
 			droneSynths.add(Synth(\droneSynth, [
-				\freq, ~getDroneNote.(~droneDegrees.choose, 2).midicps,  // supertonic, 2 octave shift
+				\freq, ~getDroneNote.(~droneDegrees.choose, -1).midicps,  // degree, octave shift
 				\droneDetune,  ~getMapped.(\droneDetune),
 				\lfoRate, ~getMapped.(\droneLfoRate),
 				\ffreq,   ~getMapped.(\filterCutoff),
 				\rq,      ~getMapped.(\rq),
 				\revMix,  ~getMapped.(\revMix) * 2,
-				\amp,     ~getMapped.(\droneAmp) * 0.0001,
+				\amp,     ~getMapped.(\droneAmp),
 				\pan,     rrand(-0.5, 0.5)
 			]));
 
@@ -1406,7 +1422,7 @@ Pdef(\ambgen,
 					\freq, bassFreq * 2,
 					\lpfFactor, ~getMapped.(\lpfFactor),
 					\revMix, ~getMapped.(\revMix),
-					\amp, ~getMapped.(\bellAmp) * 2,
+					\amp, ~getMapped.(\bellAmp),
 
 					\type, Pseq({
 						var decisions = Array.fill(4, { \rest }); // 4 rests
@@ -1517,8 +1533,6 @@ Routine({
 // simple test Pbind for darkPad
 Pbind(
     \instrument, \darkPad,
-
-	\legato, ~getMapped.(\legato) - 0.2,
     // make a 3-note chord
     \degree, Pseq([
         [0, 4, 7],   // minor triad
@@ -1528,11 +1542,19 @@ Pbind(
     ], inf),
 
 	\scale, Scale.minor,   // can switch to your ~scalePcs later
-	\octave, 4,            // fairly low register
+	\octave, 5,            // fairly low register
 	\dur, Pfunc({ ~getMapped.(\dur)}),
-	\atk,    ~getMapped.(\atk),
-	\rel,    ~getMapped.(\rel),
-	\amp,    ~getMapped.(\bassAmp)
+	\legato,      ~getMapped.(\legato),
+	\darkPadSub,  ~getMapped.(\darkPadSub),
+	\distAmt,     ~getMapped.(\distAmt),
+	\modRate,     ~getMapped.(\modRate),
+	\ffreq,       ~getMapped.(\darkPadCutoff),
+	\darkPadBits, ~getMapped.(\darkPadBits),
+	\revMix,      ~getMapped.(\revMix) * 0.7,
+	\atk,         ~getMapped.(\atk),
+	\rel,         ~getMapped.(\rel),
+	\rq,          ~getMapped.(\rq),
+	\amp,         ~getMapped.(\bassAmp)
 ).play;
 )
 
@@ -1556,16 +1578,16 @@ Pbind(
 ~nextChord.().midicps.postln;
 
 // Warmth: 0 (cold/thin) → 1 (warm/fat)
-~setParam.(\warmth, 0.5);
+~setParam.(\warmth, 0.8);
 
 // Brightness: 0 (dark/muffled) → 1 (bright/open)
-~setParam.(\brightness, 0);
+~setParam.(\brightness, 0.2);
 
 // Density: 0 (few voices/open) → 1 (many voices/clustered)
-~setParam.(\density, 0.2);
+~setParam.(\density, 0.4);
 
 // Variability: 0 (slow/static) → 1 (fast/changing)
-~setParam.(\variability, 0.9);
+~setParam.(\variability, 0.5);
 
 // Rhythmicity: 0 (smooth/legato) → 1 (tight/rhythmic)
 ~setParam.(\rhythmicity, 0.5);
