@@ -6,6 +6,17 @@ s.plotTree;
 
 
 (
+// --- Reset Mixer Utility ---
+~resetMixer = {
+	s.freeAll;   // frees all synths, groups, and releases buses
+	s.newBusAllocators; // reset bus allocators
+
+	"Mixer fully reset.".postln;
+};
+)
+
+
+(
 // --- Mixing Engine ---
 
 // Top-level groups
@@ -154,12 +165,12 @@ SynthDef(\masterFader, { |inBus=0, outBus=0, ctrlBus|
 ~fxGroup         = Bus.audio(s, 2);
 
 // Dry sends
-~padDryBus     = Bus.audio(s, 2);
-~bassDryBus    = Bus.audio(s, 2);
-~droneDryBus   = Bus.audio(s, 2);
-~bellDryBus    = Bus.audio(s, 2);
-~arpDryBus     = Bus.audio(s, 2);
-~texDryBus     = Bus.audio(s, 2);
+~padDryBus       = Bus.audio(s, 2);
+~bassDryBus      = Bus.audio(s, 2);
+~droneDryBus     = Bus.audio(s, 2);
+~bellDryBus      = Bus.audio(s, 2);
+~arpDryBus       = Bus.audio(s, 2);
+~texDryBus       = Bus.audio(s, 2);
 
 // Control buses
 // Master control
@@ -315,7 +326,7 @@ updateStates = {
     soloActive      = soloedInstruments.notEmpty or: { soloedGroups.notEmpty or: { soloedFX.notEmpty or: { fxMasterSolo.notNil } } };
     fxSoloActive    = soloedFX.notEmpty or: { fxMasterSolo.notNil };
 
-    "===== updateStates triggered =====".postln;
+    " updateStates triggered ".postln;
     ("soloedInstruments: " ++ soloedInstruments.collect(_.name)).postln;
     ("soloedGroups: " ++ soloedGroups.collect(_.name)).postln;
     ("soloedFX: " ++ soloedFX.collect(_.name)).postln;
@@ -407,7 +418,7 @@ updateStates = {
         ("Dry Sends restored: " ++ dryDebug).postln;
     };
 
-    "===== END updateStates =====".postln;
+    " END updateStates ".postln;
 };
 
 // GUI window
@@ -481,17 +492,6 @@ channels.do { |c|
     c[\slider] = slider;
     c[\mute]   = muteBtn;
     if(type != \master) { c[\solo] = soloBtn };
-};
-)
-
-
-(
-// --- Reset Mixer Utility ---
-~resetMixer = {
-	s.freeAll;   // frees all synths, groups, and releases buses
-	s.newBusAllocators; // reset bus allocators
-
-	"Mixer fully reset.".postln;
 };
 )
 
@@ -590,8 +590,8 @@ rhythmicity from fluid/free to rhythmic/structured -> pulse emphasis
 	pairs.keysValuesDo { |k, v| ~setParam.(k, v) };
 };
 
-~getParam   = { |key| ~parameters[key] };
-~getMapped  = { |key| var f = ~parameterMappings[key]; f.notNil.if({ f.() }, { nil }) };
+~getParam = { |param| ~parameters[param] };
+~getMapped = { |param| var f = ~parameterMappings[param]; f !? { f.() } };
 
 ~showParams = {
 	"Params:".postln;
@@ -920,7 +920,7 @@ SynthDef(\seaSynth, {
 // Vinyl Crackle Synth
 (
 SynthDef(\vinylCrackle, {
-    |out = 0, amp=0.1, dustDensity=3, lpFreq=4000, hpFreq=800,
+    |out = 0, amp=0.5, dustDensity=3, lpFreq=4000, hpFreq=800,
      rumbleLevel=0.1, rumbleFreq=50,
      humLevel=0.02,
      wowRate=0.3, wowDepth=0.05|
@@ -1817,11 +1817,175 @@ SynthDef(\rainTexture, { |out = 0, amp=0.2,
 )
 
 
-// --- Pdef to play instruments simultaneously ---
+// --- Control Engine Helpers ---
+
+(
+// High-level “is this layer allowed to play?” flags (read by the conductor)
+~layerOn = IdentityDictionary[
+	\Pad->true, \DarkPad->false, \Bass->false, \Drone->true,
+	\HarpArp->false, \GlassArp->false, \Bell->false,
+	\SeaTex->false, \RainTex->false, \VinylTex->true
+];
+
+// Map your channel names → control buses (matches your GUI labels)
+~channelBus = IdentityDictionary[
+	\Pad        -> ~padCtrl,
+	\DarkPad    -> ~darkPadCtrl,
+	\Bass       -> ~bassCtrl,
+	\Drone      -> ~droneCtrl,
+	\Bell       -> ~bellCtrl,
+	\HarpArp    -> ~harpCtrl,
+	\GlassArp   -> ~glassCtrl,
+	\SeaTex     -> ~seaCtrl,
+	\RainTex    -> ~rainCtrl,
+	\VinylTex   -> ~vinylCtrl,
+
+	// FX + group/master (handy to automate too)
+	\FXMaster   -> ~fxGroupCtrl,
+	\ReverbFX   -> ~revCtrl,
+	\DelayFX    -> ~delCtrl,
+	\CompFX     -> ~compCtrl,
+	\SaturatorFX-> ~satCtrl,
+	\Master     -> ~masterCtrl
+];
+
+// Control-bus ramp (for faders/sends/master etc.)
+SynthDef(\kline, { |bus=0, start=0, end=1, dur=8, curve=0|
+	var ctl = EnvGen.kr(Env([start, end], [dur], curve), doneAction:2);
+	Out.kr(bus, ctl);
+}).add;
+
+// Helper to fade any control bus
+~fade = { |bus, to=0.0, time=8.0, curve=0, from|
+	var start = from ?? { bus.getSynchronous };  // use current bus value by default
+	Synth(\kline, [\bus, bus, \start, start, \end, to, \dur, time, \curve, curve], target: ~masterGroup);
+};
+
+// Gradually change parameters
+~rampParam = { |key, to, dur=60, curve=\lin|
+    var start = ~getParam.(key) ?? 0.5;  // safe fallback if nil
+    var env = Env([start, to], [dur], curve);
+
+    ("[rampParam] Starting ramp for %: start=%, target=%, dur=%, curve=%"
+        .format(key, start, to, dur, curve)).postln;
+
+    Task({
+		var mapped;
+        // Make an Env signal with one value per second (dur samples)
+        env.asSignal(dur).do { |val, i|
+            ~setParam.(key, val);
+
+            // compute mapped value if possible
+            mapped = ~getMapped.(key);
+            ("    step %/% → % = %, mapped → %"
+                .format(i, dur, key, val.round(0.001), mapped ?? "nil")).postln;
+
+            1.wait;   // 1 second resolution (you can reduce to e.g. 0.25.wait for finer updates)
+        };
+
+        // force final target
+        ~setParam.(key, to);
+        ("[rampParam] Finished ramp for % at final value % (mapped → %)"
+            .format(key, to, ~getMapped.(key))).postln;
+
+    }).start;
+};
+
+// Apply a scene
+~enterScene = { |scene|
+	("Entering scene: " ++ scene[\name]).postln;
+
+	// Scale / key (optional per scene)
+	if(scene[\key].notNil)   { ~setKey.(scene[\key][0], scene[\key][1]) };
+	if(scene[\scale].notNil) { ~setScale.(scene[\scale]) };
+
+	// Turn layers on/off for spawning logic
+	if(scene[\layersOn].notNil) {
+		scene[\layersOn].keysValuesDo { |k, v| ~layerOn[k] = v };
+	};
+
+	// Fade instrument/group/FX buses to targets
+	~targetsToFades.(scene[\targets] ? IdentityDictionary[], scene[\fadeTime] ? 12);
+
+	// Optional FX return shaping
+	if(scene[\fx].notNil) {
+		~targetsToFades.(IdentityDictionary[
+			\ReverbFX    -> (scene[\fx][\reverb]    ? ~revCtrl.getSynchronous),
+			\DelayFX     -> (scene[\fx][\delay]     ? ~delCtrl.getSynchronous),
+			\CompFX      -> (scene[\fx][\comp]      ? ~compCtrl.getSynchronous),
+			\SaturatorFX -> (scene[\fx][\saturator] ? ~satCtrl.getSynchronous),
+			\FXMaster    -> (scene[\fx][\fxMaster]  ? ~fxGroupCtrl.getSynchronous)
+		], scene[\fadeTime] ? 12);
+	};
+
+	// Global parameter morphs (smoothly)
+	if(scene[\params].notNil) {
+		scene[\params].keysValuesDo { |k, target|
+			~rampParam.(k, target, scene[\paramTime] ? (scene[\fadeTime] ? 12));
+		};
+	};
+};
+)
+
+
+// --- Scenen (Presets) ---
+
+(
+// A compact, tasteful starting timeline (≈ 20–25 min depending on your ~dur map)
+~scenes = [
+	(
+		name: \intro, fadeTime: 16, paramTime: 40, dur: 6,
+		key: [\D, 3], scale: \yo,
+		layersOn: (SeaTex:true, VinylTex:true, RainTex:false, Drone:true, Pad:false, DarkPad:false, Bass:false, HarpArp:false, GlassArp:false, Bell:false),
+		targets: (SeaTex:0.35, VinylTex:0.25, Drone:0.12, Master:1.0, FXMaster:0.9, ReverbFX:0.8, DelayFX:0.15),
+		params: (warmth:0.35, brightness:0.35, density:0.18, variability:0.18, rhythmicity:0.2)
+	),
+
+	(
+		name: \firstPads, fadeTime: 20, paramTime: 60, dur: 8,
+		layersOn: (Pad:true, Drone:true, SeaTex:true, VinylTex:true, GlassArp:false, HarpArp:false, Bell:false, Bass:false, DarkPad:false, RainTex:false),
+		targets: (Pad:0.55, Drone:0.18, SeaTex:0.3, VinylTex:0.2, ReverbFX:0.85, DelayFX:0.25),
+		params: (warmth:0.5, brightness:0.45, density:0.25, variability:0.22, rhythmicity:0.25)
+	),
+
+	(
+		name: \shimmer, fadeTime: 18, paramTime: 60, dur: 7,
+		scale: \lydianDominant,
+		layersOn: (GlassArp:true, HarpArp:true, RainTex:true),
+		targets: (GlassArp:0.18, HarpArp:0.12, RainTex:0.22, DelayFX:0.45, ReverbFX:0.9),
+		params: (brightness:0.65, density:0.32, variability:0.35)
+	),
+
+	(
+		name: \ground, fadeTime: 22, paramTime: 70, dur: 10,
+		layersOn: (Bass:true, DarkPad:true),
+		targets: (Bass:0.12, DarkPad:0.28, Pad:0.4, Drone:0.15, DelayFX:0.3, SaturatorFX:0.15),
+		params: (warmth:0.7, brightness:0.5, density:0.38, rhythmicity:0.35)
+	),
+
+	(
+		name: \punctuate, fadeTime: 12, paramTime: 30, dur: 6,
+		layersOn: (Bell:true, HarpArp:true, GlassArp:false),
+		targets: (Bell:0.14, HarpArp:0.1, DelayFX:0.35, ReverbFX:0.95),
+		params: (variability:0.28, density:0.3)
+	),
+
+	(
+		name: \exhale, fadeTime: 24, paramTime: 60, dur: 8,
+		scale: \inSen,
+		layersOn: (Bass:false, DarkPad:false, HarpArp:false, Bell:false, GlassArp:false),
+		targets: (Pad:0.25, Drone:0.1, RainTex:0.08, SeaTex:0.25, VinylTex:0.2, DelayFX:0.15, ReverbFX:0.8),
+		params: (warmth:0.4, brightness:0.35, density:0.18, variability:0.15, rhythmicity:0.15)
+	)
+];
+)
+
+
+// --- Control Engine ---
 
 (
 ~seaPattern = Pbind(
-    \instrument, \seaSynth,
+    \instrument, \textureSynth,
 	\legato, Pwhite(0.97,1.03),
 
     // time between waves, in beats
@@ -1840,8 +2004,8 @@ SynthDef(\rainTexture, { |out = 0, amp=0.2,
     },
 
     // convert atk/sus also to seconds
-    \atk,       Pfunc { |ev| ev[\atk] * ev[\dur] * thisThread.clock.beatDur },
-    \sus,       Pfunc { |ev| ev[\sus] * ev[\dur] * thisThread.clock.beatDur },
+    \atk, Pfunc { |ev| ev[\atk] * ev[\dur] * thisThread.clock.beatDur },
+    \sus, Pfunc { |ev| ev[\sus] * ev[\dur] * thisThread.clock.beatDur },
 
     // synthesis params
     \ffreq,     1500,
@@ -1854,8 +2018,7 @@ SynthDef(\rainTexture, { |out = 0, amp=0.2,
     \waveDepth, Pfunc({ ~mapLin.(~parameters[\density], 0, 1, 0.1, 0.6) }),
     \waveRate,  Pfunc({ ~mapLin.(~parameters[\variability], 0, 1, 0.02, 0.08) }),
     \pan,       Pwhite(-1.0, 1.0),
-    \amp,       Pfunc({ ~getMapped.(\seaAmp) }),
-	\out,       ~seaBus
+    \amp,       Pfunc({ ~getMapped.(\seaAmp) })
 );
 
 ~vinylPattern = Pmono(
@@ -1883,208 +2046,223 @@ SynthDef(\rainTexture, { |out = 0, amp=0.2,
     \amp,      Pfunc({ ~getMapped.(\rainAmp) }),
 	\out, ~rainBus
 );
+)
 
+(
 Pdef(\ambgen,
     Pspawner { |sp|
         var padSynths = List[];
-		var darkPadSynths = List[];
+        var darkPadSynths = List[];
         var bassSynths = List[];
-		var droneSynths = List[];
-        var chord, dur, subdiv, idx, durations, padFreqs, padPans, bassFreq, chordStartBeat;
+        var droneSynths = List[];
 
-		// Background layers
-		sp.par(~vinylPattern);
-		sp.par(~rainPattern);
+        var chord, dur, durations, padFreqs, padPans, bassFreq;
+
+        ">>> Starting ambgen spawner".postln;
+
+        // --- Background textures ---
+        if(~layerOn[\VinylTex]) { sp.par(~vinylPattern) };
+        if(~layerOn[\RainTex])  { sp.par(~rainPattern)  };
+        if(~layerOn[\SeaTex])   { sp.par(~seaPattern)   };
 
         loop {
             chord = ~nextChord.();
             dur   = ~getMapped.(\dur);
-			("Duration: " ++ dur).postln;
-			durations = ~genDurations.(dur);
-			chordStartBeat = thisThread.beats;  // mark when chord started
+            durations = ~genDurations.(dur);
 
-            // stop old synths
-            padSynths.do { |s| s.set(\gate, 0) };
-			darkPadSynths.do { |s| s.set(\gate, 0) };
-            bassSynths.do { |s| s.set(\gate, 0) };
-			droneSynths.do { |s| s.set(\gate, 0) };
-            padSynths.clear;
-			darkPadSynths.clear;
-            bassSynths.clear;
-			droneSynths.clear;
+            // Stop & clear previous synths
+            padSynths.do { |s| s.set(\gate, 0) };      padSynths.clear;
+            darkPadSynths.do { |s| s.set(\gate, 0) };  darkPadSynths.clear;
+            bassSynths.do { |s| s.set(\gate, 0) };     bassSynths.clear;
+            droneSynths.do { |s| s.set(\gate, 0) };    droneSynths.clear;
 
-            // precompute pad params
+            // --- precompute pad params ---
             padFreqs = {
-				var freqs, detune, n, baseVoices, octaveVoices, octaveAmpFactor, voicePairs;
-				freqs  = chord.midicps;
-				detune = ~getMapped.(\detune);
-				n      = ~getMapped.(\numVoices);
+                var freqs, detune, n, baseVoices, octaveVoices, octaveAmpFactor, voicePairs;
+                freqs  = chord.midicps;
+                detune = ~getMapped.(\detune);
+                n      = ~getMapped.(\numVoices);
 
-				// base voices
-				baseVoices = Array.fill(n, { |i|
-					freqs + (detune * (i - (n - 1) / 2))
-				}).flat;
+                baseVoices = Array.fill(n, { |i|
+                    freqs + (detune * (i - (n - 1) / 2))
+                }).flat;
 
-				// octave voices
-				octaveVoices = baseVoices * 2; // shift up an octave
+                octaveVoices = baseVoices * 2;
+                octaveAmpFactor = ~mapExp.(~parameters[\density], 0, 1, 0.1, 0.3);
 
-				octaveAmpFactor = ~mapExp.(~parameters[\density], 0, 1, 0.1, 0.3);
+                voicePairs = baseVoices.collect { |f| [f, 1.0] }
+                           ++ octaveVoices.collect { |f| [f, octaveAmpFactor] };
 
-				// collect both freq + amp
-				voicePairs = baseVoices.collect { |f| [f, 1.0] }
-				++ octaveVoices.collect { |f| [f, octaveAmpFactor] };
+                voicePairs.collect(_.first)
+            }.value;
 
-				// --- Debug ---
-				("[DEBUG] chord (MIDI): " ++ chord).postln;
-				("[DEBUG] baseVoices sorted: " ++ baseVoices.sort).postln;
-				("[DEBUG] octaveVoices sorted: " ++ octaveVoices.sort).postln;
-				("[DEBUG] all voicePairs (sorted by freq): " ++ voicePairs.sort { |a, b| a[0] < b[0] }).postln;
+            padPans = Array.fill(padFreqs.size, { |i|
+                (i / (padFreqs.size.max(1) - 1)).linlin(0, 1, -1, 1)
+            });
 
-				voicePairs
-			}.value;
-
-			// Now padPans matches total voices
-			padPans = Array.fill(padFreqs.size, { |i|
-				(i / (padFreqs.size - 1)) * 2 - 1
-			});
-
-            // precompute bass
+            // --- bass register ---
             bassFreq = ~clampBassRange.(chord[0] - 24).midicps;
 
-            // spawn pad voices
-            padFreqs.do { |f, i|
-                padSynths.add(Synth(\padSynth, [
-                    \freq, f,
-                    \pan, padPans[i],
-					\legato,  ~getMapped.(\legato),
-                    \modRate, ~getMapped.(\modRate),
-                    \ffreq,   ~getMapped.(\filterCutoff),
-                    \revMix,  ~getMapped.(\revMix) * 0.7,
-                    \atk,     ~getMapped.(\atk),
-                    \rel,     ~getMapped.(\rel),
-                    \rq,      ~getMapped.(\rq),
-					\amp,     ~getAmpForVoices.(chord.size),
-					\out,     ~padBus
+            // --- PAD ---
+            if(~layerOn[\Pad]) {
+                padFreqs.do { |f, i|
+                    padSynths.add(Synth(\padSynth, [
+                        \freq, f,
+                        \pan, padPans[i],
+                        \legato,  ~getMapped.(\legato),
+                        \modRate, ~getMapped.(\modRate),
+                        \ffreq,   ~getMapped.(\filterCutoff),
+                        \revMix,  ~getMapped.(\revMix) * 0.7,
+                        \atk,     ~getMapped.(\atk),
+                        \rel,     ~getMapped.(\rel),
+                        \rq,      ~getMapped.(\rq),
+                        \amp,     ~getAmpForVoices.(chord.size),
+                        \out,     ~padBus
+                    ]));
+                };
+            };
+
+            // --- DARK PAD ---
+            if(~layerOn[\DarkPad]) {
+                padFreqs.do { |f, i|
+                    darkPadSynths.add(Synth(\darkPad, [
+                        \freq, f * 0.5,
+                        \pan, padPans[i],
+                        \legato,      ~getMapped.(\legato),
+                        \darkPadSub,  ~getMapped.(\darkPadSub),
+                        \distAmt,     ~getMapped.(\distAmt),
+                        \crushMix,    ~getMapped.(\crushMix),
+                        \modRate,     ~getMapped.(\modRate),
+                        \ffreq,       ~getMapped.(\darkPadCutoff),
+                        \darkPadBits, ~getMapped.(\darkPadBits),
+                        \revMix,      ~getMapped.(\revMix) * 0.7,
+                        \atk,         ~getMapped.(\atk),
+                        \rel,         ~getMapped.(\rel),
+                        \rq,          ~getMapped.(\rq),
+                        \amp,         ~getAmpForVoices.(chord.size),
+                        \out,         ~darkPadBus
+                    ]));
+                };
+            };
+
+            // --- BASS ---
+            if(~layerOn[\Bass]) {
+                bassSynths.add(Synth(\bassSynth, [
+                    \freq,  bassFreq,
+                    \legato, ~getMapped.(\legato) * 0.97,
+                    \ffreq,  ~getMapped.(\filterCutoff),
+                    \rq,     ~getMapped.(\rq),
+                    \subOct, ~getMapped.(\sub),
+                    \drive,  ~getMapped.(\drive),
+                    \atk,    ~getMapped.(\atk),
+                    \rel,    ~getMapped.(\rel),
+                    \amp,    ~getMapped.(\bassAmp),
+                    \out,    ~bassBus
                 ]));
             };
 
-			// spawn pad voices
-            padFreqs.do { |f, i|
-                darkPadSynths.add(Synth(\darkPad, [
-                    \freq, f * 0.5, // one octave lower
-                    \pan, padPans[i],
-					\legato,      ~getMapped.(\legato),
-					\darkPadSub,  ~getMapped.(\darkPadSub),
-					\distAmt,     ~getMapped.(\distAmt),
-					\crushMix,    ~getMapped.(\crushMix),
-                    \modRate,     ~getMapped.(\modRate),
-					\ffreq,       ~getMapped.(\darkPadCutoff),
-					\darkPadBits, ~getMapped.(\darkPadBits),
-                    \revMix,      ~getMapped.(\revMix) * 0.7,
-                    \atk,         ~getMapped.(\atk),
-                    \rel,         ~getMapped.(\rel),
+            // --- DRONE ---
+            if(~layerOn[\Drone]) {
+                droneSynths.add(Synth(\droneSynth, [
+                    \freq,        ~getDroneNote.(~droneDegrees.choose, 2).midicps,
+                    \droneDetune, ~getMapped.(\droneDetune),
+                    \lfoRate,     ~getMapped.(\droneLfoRate),
+                    \ffreq,       ~getMapped.(\filterCutoff),
                     \rq,          ~getMapped.(\rq),
-                    \amp,         ~getAmpForVoices.(chord.size),
-					\out,         ~darkPadBus
+                    \revMix,      ~getMapped.(\revMix) * 1.5,
+                    \pan,         rrand(-0.5, 0.5),
+                    \amp,         ~getMapped.(\droneAmp),
+                    \out,         ~droneBus
                 ]));
             };
 
-            // spawn bass voice
-            bassSynths.add(Synth(\bassSynth, [
-                \freq, bassFreq,
-				\legato, ~getMapped.(\legato) * 0.97,
-                \ffreq,  ~getMapped.(\filterCutoff),
-                \rq,     ~getMapped.(\rq),
-                \subOct, ~getMapped.(\sub),
-                \drive,  ~getMapped.(\drive),
-                \atk,    ~getMapped.(\atk),
-                \rel,    ~getMapped.(\rel),
-                \amp,    ~getMapped.(\bassAmp),
-				\out,    ~bassBus
-            ]));
+            // --- HARP ARP ---
+            if(~layerOn[\HarpArp]) {
+                sp.par(
+                    Pbind(
+                        \instrument, \harpPluck,
+                        \dur, Pseq(durations, 1),
+                        \freq, Pxrand(chord.midicps, inf),
+                        \decay, Pwhite(2, 5, inf),
+                        \pan, Pwhite(-0.6, 0.6, inf),
+                        \revMix, ~getMapped.(\revMix),
+                        \amp, ~getMapped.(\harpAmp),
+                        \out, ~harpBus
+                    )
+                );
+            };
 
-			// spawn drone
-			droneSynths.add(Synth(\droneSynth, [
-				\freq,        ~getDroneNote.(~droneDegrees.choose, 2).midicps,  // degree, octave shift
-				\droneDetune, ~getMapped.(\droneDetune),
-				\lfoRate,     ~getMapped.(\droneLfoRate),
-				\ffreq,       ~getMapped.(\filterCutoff),
-				\rq,          ~getMapped.(\rq),
-				\revMix,      ~getMapped.(\revMix) * 1.5,
-				\pan,         rrand(-0.5, 0.5),
-				\amp,         ~getMapped.(\droneAmp),
-				\out,         ~droneBus
-			]));
+            // --- GLASS ARP ---
+            if(~layerOn[\GlassArp]) {
+                sp.par(
+                    Pbind(
+                        \instrument, \glassArp,
+                        \dur, Pseq(durations, 1),
+                        \freq, Pxrand(chord.midicps * 2, inf),
+                        \bright, ~getMapped.(\bright),
+                        \pan, Pwhite(-0.6, 0.6, inf),
+                        \revMix, ~getMapped.(\revMix) * 1.3,
+                        \amp, ~getMapped.(\harpAmp),
+                        \out, ~glassBus
+                    )
+                );
+            };
 
-			sp.par(
-				Pbind(
-					\instrument, \harpPluck,
-					\dur, Pseq(durations, 1),
-					\freq, Pxrand(chord.midicps, inf),
-					\decay, Pwhite(2, 5, inf),
-					\pan, Pwhite(-0.6, 0.6, inf),
-					\revMix, ~getMapped.(\revMix),
-					\amp, ~getMapped.(\harpAmp),
-					\out, ~harpBus
-				)
-			);
+            // --- BELL ---
+            if(~layerOn[\Bell]) {
+                sp.par(
+                    Pbind(
+                        \instrument, \bell,
+                        \dur, Pseq(Array.fill(4, { dur/4 }), 1),
+                        \legato, ~getMapped.(\legato) * 0.97,
+                        \freq, bassFreq * 2,
+                        \lpfFactor, ~getMapped.(\lpfFactor),
+                        \revMix, ~getMapped.(\revMix),
+                        \amp, ~getMapped.(\bellAmp),
+                        \type, Pseq({
+                            var decisions = Array.fill(4, { \rest });
+                            var step = (0..3);
+                            var bellPlayed = false;
+                            step.do { |i|
+                                if (bellPlayed.not) {
+                                    var options, weights, chosen;
+                                    switch(i,
+                                        0, { options = [\note, \rest]; weights = [0.3, 0.7]; },
+                                        2, { options = [\note, \rest]; weights = [0.1, 0.9]; },
+                                        1, { options = [\note, \rest]; weights = [0.05, 0.95]; },
+                                        3, { options = [\note, \rest]; weights = [0.05, 0.95]; },
+                                        { options = [\rest]; weights = [1.0]; }
+                                    );
+                                    chosen = options.wchoose(weights);
+                                    decisions[i] = chosen;
+                                    if (chosen == \note) { bellPlayed = true };
+                                };
+                            };
+                            decisions
+                        }.(), 1),
+                        \out, ~bellBus
+                    )
+                );
+            };
 
-			sp.par(
-				Pbind(
-					\instrument, \glassArp,
-					\dur, Pseq(durations, 1),
-					\freq, Pxrand(chord.midicps*2, inf),
-					\bright, ~getMapped.(\bright),
-					\pan, Pwhite(-0.6, 0.6, inf),
-					\revMix, ~getMapped.(\revMix) * 1.3,
-					\amp, ~getMapped.(\harpAmp),
-					\out, ~glassBus
-				)
-			);
-
-			sp.par(
-				Pbind(
-					\instrument, \bell,
-					\dur, Pseq(Array.fill(4, { dur/4 }), 1),
-					\legato, ~getMapped.(\legato) * 0.97,
-					\freq, bassFreq * 2,
-					\lpfFactor, ~getMapped.(\lpfFactor),
-					\revMix, ~getMapped.(\revMix),
-					\amp, ~getMapped.(\bellAmp),
-					\type, Pseq({
-						var decisions = Array.fill(4, { \rest }); // 4 rests
-						var step = (0..3);
-						var bellPlayed = false;
-
-						step.do { |i|
-							if (bellPlayed.not) {
-								var options, weights, chosen;
-								switch(i,
-									0, { options = [\note, \rest]; weights = [0.3, 0.7]; },
-									2, { options = [\note, \rest]; weights = [0.1, 0.9]; },
-									1, { options = [\note, \rest]; weights = [0.05, 0.95]; },
-									3, { options = [\note, \rest]; weights = [0.05, 0.95]; },
-									{ options = [\rest]; weights = [1.0]; }
-								);
-								chosen = options.wchoose(weights);
-								decisions[i] = chosen;
-								if (chosen == \note) { bellPlayed = true };
-							};
-						};
-						decisions
-					}.(), 1),
-					\out, ~bellBus
-				)
-			);
-
-			// run sea & vinyl in parallel
-			sp.par(Pbindf(~seaPattern));
-
-			sp.wait(dur);
+            sp.wait(dur);
         }
     }
 ).play;
+
+
+// Conductor routine: step through scenes; scene.dur is in chord cycles
+~conductor = Routine({
+	~scenes.do { |sc|
+		~enterScene.(sc);
+		(sc[\dur] * ((~getMapped !? { ~getMapped.(\dur) }) ? 8)).wait;
+	};
+}).play(TempoClock.default);
 )
+
+// Handy stop
+~stopConductor = { ~conductor.tryPerform(\stop) };
+
 
 
 // --- Routine to change scales ---
@@ -2156,130 +2334,14 @@ Routine({
 )
 
 
-
-(
-// simple test Pbind for darkPad
-Pbind(
-    \instrument, \darkPad,
-    // make a 3-note chord
-    \degree, Pseq([
-        [0, 4, 7],   // minor triad
-        [2, 5, 9],   // another chord
-        [4, 7, 11],  // etc.
-        [5, 9, 0]    // cycle back
-    ], inf),
-
-	\scale, Scale.minor,   // can switch to your ~scalePcs later
-	\octave, 5,            // fairly low register
-	\dur, Pfunc({ ~getMapped.(\dur)}),
-	\legato,      ~getMapped.(\legato),
-	\darkPadSub,  ~getMapped.(\darkPadSub),
-	\distAmt,     ~getMapped.(\distAmt),
-	\crushMix,    ~getMapped.(\crushMix),
-	\modRate,     ~getMapped.(\modRate),
-	\ffreq,       ~getMapped.(\darkPadCutoff),
-	\darkPadBits, ~getMapped.(\darkPadBits),
-	\revMix,      ~getMapped.(\revMix) * 0.7,
-	\atk,         ~getMapped.(\atk),
-	\rel,         ~getMapped.(\rel),
-	\rq,          ~getMapped.(\rq),
-	\amp,         ~getMapped.(\bassAmp)
-).play;
-)
-
-(
-// simple test Pbind for darkPad
-Pbind(
-	\instrument, \droneSynth,
-	\freq, ~getDroneNote.(~droneDegrees.choose, -1).midicps,  // degree, octave shift
-	\droneDetune,  ~getMapped.(\droneDetune),
-	\lfoRate, ~getMapped.(\droneLfoRate),
-	\ffreq,   ~getMapped.(\filterCutoff),
-	\rq,      ~getMapped.(\rq),
-	\revMix,  ~getMapped.(\revMix) * 1.2,
-	\amp,     ~getMapped.(\droneAmp),
-	\pan,     rrand(-0.5, 0.5)
-).play;
-)
-
-(
-// simple test arpeggio for glassArp
-Pbind(
-    \instrument, \glassArp,
-
-    // arpeggiated chord patterns
-    \degree, Pseq([
-        [0, 3, 7],   // minor triad
-        [2, 5, 9],   // another shape
-        [4, 7, 11],  // bright color
-        [5, 9, 0]    // cycle back
-    ], inf).stutter(4),   // break into arpeggio
-
-    \scale, Scale.minor,   // test in minor scale
-    \octave, Pseq([5, 6], inf),  // alternate registers
-    \dur, Pwhite(0.25, 0.5, inf),  // shimmering variable rhythm
-    \atk, 0.01,
-    \rel, Pwhite(2, 5, inf),       // different decay times
-    \rq, Pwhite(0.01, 0.1, inf),   // resonance sharpness variation
-    \bright, Pwhite(0.5, 1.0, inf), // sparkle amount
-    \revMix, 0.7,
-    \amp, 0.1,
-    \pan, Pwhite(-0.6, 0.6, inf), // stereo movement
-	\out, ~glassBus
-).play;
-)
-
-(
-Pbind(
-    \instrument, \rainTexture,
-    \dur, 100,                 // long event, constant rain
-    \dens,  Pseq([200, 400, 600,300], inf),  // drizzle → medium → heavier
-    \hp,    300,             // cut low rumble
-    \lp,    6000,            // keep highs
-    \revMix, 0.3,
-	\noiseAmp, 0.5,
-    \amp,   0.4
-).play;
-)
-
-x = Synth(\bassSynth, [\out, 0]); // send straight to hardware output
-x.free;
-(
-x = Synth(\bassSynth, [\out, ~bassBus], target: ~sourcesGroup);
-{ In.ar(~masterBus, 2) }.play;
-)
-
-(
-x = Synth(\padSynth, [\out, ~padBus], target: ~sourcesGroup);
-{ In.ar(~masterBus, 2) }.play;
-)
-
-(
-~testBus = Bus.audio(s, 2);
-~bassCtrl = Bus.control(s, 1).set(10);  // full gain
-
-~testFader = Synth(\fader, [\inBus, ~testBus, \outBus, 0, \ctrlBus, ~testCtrl]);
-
-// simple sine feeding into the bus
-~src = { Out.ar(~testBus, SinOsc.ar(220, 0, 0.2)) }.play;
-)
-
-~padCtrl.set(100);
-~padGroupCtrl.set(100);
-~masterCtrl.set(1.0); // make sure master is up too
-
-~padCtrl.get({ |v| ("padCtrl = " ++ v).postln; });
-~padGroupCtrl.get({ |v| ("padGroupCtrl = " ++ v).postln; });
-~masterCtrl.get({ |v| ("masterCtrl = " ++ v).postln; });
-
-
-
 // --- Usage & Checks ---
 
 // Define key and scale
 ~setKey.(\C, 4);
 ~listScales = { allScales.do(_.postln) };
 ~setScale.(\dorian);
+~getParam = { |key| ~parameters[key].value };
+~parameters[key].postln;
 
 // Check scale, key and chord
 ~scalePcs.postln;     // Should be [0,2,4,5,7,9,11] for ionian
@@ -2318,7 +2380,4 @@ SynthDescLib.global.browse; // browse all available defs
 
 // Reset mixer when all buses are used up
 ~resetMixer.();
-s.freeAll;   // frees all synths, groups, and releases buses
-s.newBusAllocators; // reset bus allocators
-
 
