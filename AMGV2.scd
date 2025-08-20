@@ -1,6 +1,197 @@
 s.reboot;
+s.scope;
 s.meter;
 s.plotTree;
+
+
+(
+// --- Mixing Engine ---
+
+// Simple fader SynthDef
+SynthDef(\fader, { |inBus, outBus, amp=1.0|
+    var sig = In.ar(inBus, 2) * amp;
+    Out.ar(outBus, sig);
+}).add;
+
+// Multi-send: tap one input bus, send copies to multiple FX buses
+SynthDef(\multiSend, { |inBus, revBus, compBus, delayBus, satBus, amp=0.5|
+    var sig = In.ar(inBus, 2) * amp;
+    Out.ar(revBus, sig);
+    Out.ar(compBus, sig);
+    Out.ar(delayBus, sig);
+    Out.ar(satBus, sig);
+}).add;
+
+// FX reverb
+SynthDef(\fxReverb, { |inBus=0, outBus=0, room=0.9, damp=0.5, mix=1.0|
+    var in, sig;
+	in = In.ar(inBus, 2);
+    sig = FreeVerb2.ar(in[0], in[1], mix, room, damp); // always wet
+    Out.ar(outBus, sig);
+}).add;
+
+// FX compression
+SynthDef(\fxComp, { |inBus=0, outBus=0, thresh=0.4, slopeAbove=0.3, clamp=0.01, relax=0.3|
+    var in, sig;
+    in = In.ar(inBus, 2);
+    sig = Compander.ar(
+        in, in,
+        thresh,        // threshold
+        1,             // slopeBelow (no expansion)
+        slopeAbove,    // slopeAbove (compression)
+        clamp, relax
+    );
+    Out.ar(outBus, sig);
+}).add;
+
+// FX delay
+SynthDef(\fxDelay, { |inBus=0, outBus=0, maxDelay=2.0, delayTime=0.5, feedback=0.3|
+    var in, sig;
+    in = In.ar(inBus, 2);
+    sig = CombC.ar(in, maxDelay, delayTime, feedback * maxDelay);
+    Out.ar(outBus, sig);
+}).add;
+
+// FX saturation
+SynthDef(\fxSaturator, { |inBus=0, outBus=0, drive=1.1|
+    var in, sig;
+    in = In.ar(inBus, 2);
+    sig = tanh(in * drive);
+    Out.ar(outBus, sig);
+}).add;
+
+
+// Master fader (with final FX)
+SynthDef(\masterFader, { |inBus=0, outBus=0|
+    var sig = In.ar(inBus, 2);
+
+    // Global processing
+    sig = Compander.ar(sig, sig, thresh: 0.4, slopeBelow: 1, slopeAbove: 0.3, clampTime: 0.01, relaxTime: 0.3);
+    sig = FreeVerb2.ar(sig[0], sig[1], mix: 0.1, room: 0.7, damp: 0.5);
+	sig = Limiter.ar(sig, 0.9);
+
+	Out.ar(outBus, sig);
+}).add;
+
+// Master buses
+~masterBus      = Bus.audio(s, 2);
+
+// Instrument buses
+~padBus        = Bus.audio(s, 2);
+~darkPadBus    = Bus.audio(s, 2);
+~bassBus       = Bus.audio(s, 2);
+~droneBus      = Bus.audio(s, 2);
+~harpBus       = Bus.audio(s, 2);
+~glassBus      = Bus.audio(s, 2);
+~bellBus       = Bus.audio(s, 2);
+~seaTexBus     = Bus.audio(s, 2);
+~rainTexBus    = Bus.audio(s, 2);
+~vinylTexBus   = Bus.audio(s, 2);
+
+// FX buses
+~revBus        = Bus.audio(s, 2);
+~compBus       = Bus.audio(s, 2);
+~delBus        = Bus.audio(s, 2);
+~satBus        = Bus.audio(s, 2);
+
+// Group buses
+~fxGroup       = Bus.audio(s, 2);
+~padGroupBus   = Bus.audio(s, 2);
+~bassGroupBus  = Bus.audio(s, 2);
+~droneGroupBus = Bus.audio(s, 2);
+~bellGroupBus  = Bus.audio(s, 2);
+~arpGroupBus   = Bus.audio(s, 2);
+~texGroupBus   = Bus.audio(s, 2);
+
+// Instrument faders
+~padFader        = Synth(\fader,       [\inBus, ~padBus,        \outBus, ~padGroupBus,   \amp, 0.5]);
+~darkPadFader    = Synth(\fader,       [\inBus, ~darkPadBus,    \outBus, ~padGroupBus,   \amp, 0.5]);
+~bassFader       = Synth(\fader,       [\inBus, ~bassBus,       \outBus, ~bassGroupBus,  \amp, 0.3]);
+~droneFader      = Synth(\fader,       [\inBus, ~droneBus,      \outBus, ~droneGroupBus, \amp, 0.6]);
+~bellFader       = Synth(\fader,       [\inBus, ~bellBus,       \outBus, ~bellGroupBus,  \amp, 0.6]);
+~harparpFader    = Synth(\fader,       [\inBus, ~harpArpBus,    \outBus, ~arpGroupBus,   \amp, 0.5]);
+~glassarpFader   = Synth(\fader,       [\inBus, ~glassArpBus,   \outBus, ~arpGroupBus,   \amp, 0.5]);
+~seaTexFader     = Synth(\fader,       [\inBus, ~seaTexBus,     \outBus, ~texGroupBus,   \amp, 0.3]);
+~rainTexFader    = Synth(\fader,       [\inBus, ~rainTexpBus,   \outBus, ~texGroupBus,   \amp, 0.3]);
+~vinylTexFader   = Synth(\fader,       [\inBus, ~vinylTexpBus,  \outBus, ~texGroupBus,   \amp, 0.3]);
+
+// Group faders
+~padGroupFader   = Synth(\fader,       [\inBus, ~padGroupBus,   \outBus, ~masterBus,     \amp, 0.5]);
+~bassGroupFader  = Synth(\fader,       [\inBus, ~bassGroupBus,  \outBus, ~masterBus,     \amp, 0.3]);
+~droneGroupFader = Synth(\fader,       [\inBus, ~droneGroupBus, \outBus, ~masterBus,     \amp, 0.6]);
+~bellGroupFader  = Synth(\fader,       [\inBus, ~bellGroupBus,  \outBus, ~masterBus,     \amp, 0.6]);
+~arpGroupFader   = Synth(\fader,       [\inBus, ~arpGroupBus,   \outBus, ~masterBus,     \amp, 0.5]);
+~texGroupFader   = Synth(\fader,       [\inBus, ~texGroupBus,   \outBus, ~masterBus,     \amp, 0.3]);
+~fxGroupFader    = Synth(\fader,       [\inBus, ~fxBus,         \outBus, ~masterBus,     \amp, 0.3]);
+
+// FX sends
+~padGroupSend    = Synth(\multiSend,   [\inBus, ~padGroupBus,   \revBus, ~revBus, \compBus, ~compBus, \delayBus, ~delBus, \satBus, ~satBus, \amp, 0.5]);
+~bassGroupSend   = Synth(\multiSend,   [\inBus, ~bassGroupBus,  \revBus, ~revBus, \compBus, ~compBus, \delayBus, ~delBus, \satBus, ~satBus, \amp, 0.5]);
+~droneGroupSend  = Synth(\multiSend,   [\inBus, ~droneGroupBus, \revBus, ~revBus, \compBus, ~compBus, \delayBus, ~delBus, \satBus, ~satBus, \amp, 0.5]);
+~bellGroupSend   = Synth(\multiSend,   [\inBus, ~bellGroupBus,  \revBus, ~revBus, \compBus, ~compBus, \delayBus, ~delBus, \satBus, ~satBus, \amp, 0.5]);
+~arpGroupSend    = Synth(\multiSend,   [\inBus, ~arpGroupBus,   \revBus, ~revBus, \compBus, ~compBus, \delayBus, ~delBus, \satBus, ~satBus, \amp, 0.5]);
+~texGroupSend    = Synth(\multiSend,   [\inBus, ~texGroupBus,   \revBus, ~revBus, \compBus, ~compBus, \delayBus, ~delBus, \satBus, ~satBus, \amp, 0.5]);
+
+// Instantiate FX processors
+~reverbFX        = Synth(\fxReverb,    [\inBus, ~revBus,        \outBus, ~fxGroup]);
+~compFX          = Synth(\fxComp,      [\inBus, ~compBus,       \outBus, ~fxGroup]);
+~delayFX         = Synth(\fxDelay,     [\inBus, ~delBus,        \outBus, ~fxGroup]);
+~saturatorFX     = Synth(\fxSaturator, [\inBus, ~satBus,        \outBus, ~fxGroup]);
+
+// Master fader
+~masterFader     = Synth(\masterFader, [\inBus, ~masterBus, \outBus, 0]);
+)
+
+
+// --- Full Mixer Console GUI ---
+
+(
+var win, rowIndices, channels, soloActive, updateStates, colInstrument, colGroup, colFX, colMaster;
+
+// Colors
+colInstrument = Color(0.9, 0.9, 0.9);  // light grey
+colGroup      = Color(0.7, 0.9, 0.7);  // greenish
+colFX         = Color(0.7, 0.7, 0.9);  // bluish
+colMaster     = Color(1, 0.6, 0.2);    // orange
+
+
+// Channel definitions
+// Now each channel is a dictionary with named keys
+channels = [
+    // Instrument level
+    (name: \Pad,         synth: ~padFader,        color: colInstrument, type: \instrument),
+    (name: \DarkPad,     synth: ~darkPadFader,    color: colInstrument, type: \instrument),
+    (name: \Bass,        synth: ~bassFader,       color: colInstrument, type: \instrument),
+    (name: \Drone,       synth: ~droneFader,      color: colInstrument, type: \instrument),
+    (name: \Bell,        synth: ~bellFader,       color: colInstrument, type: \instrument),
+    (name: \HarpArp,     synth: ~harparpFader,    color: colInstrument, type: \instrument),
+    (name: \GlassArp,    synth: ~glassarpFader,   color: colInstrument, type: \instrument),
+    (name: \SeaTex,      synth: ~seaTexFader,     color: colInstrument, type: \instrument),
+    (name: \RainTex,     synth: ~rainTexFader,    color: colInstrument, type: \instrument),
+    (name: \VinylTex,    synth: ~vinylTexFader,   color: colInstrument, type: \instrument),
+
+    // Group level
+    (name: \PadGroup,    synth: ~padGroupFader,   color: colGroup,      type: \group),
+    (name: \BassGroup,   synth: ~bassGroupFader,  color: colGroup,      type: \group),
+    (name: \DroneGroup,  synth: ~droneGroupFader, color: colGroup,      type: \group),
+    (name: \BellGroup,   synth: ~bellGroupFader,  color: colGroup,      type: \group),
+    (name: \ArpGroup,    synth: ~arpGroupFader,   color: colGroup,      type: \group),
+    (name: \TexGroup,    synth: ~texGroupFader,   color: colGroup,      type: \group),
+    (name: \FXGroup,     synth: ~fxGroupFader,    color: colGroup,      type: \group),
+
+    // FX return level
+    (name: \ReverbFX,    synth: ~reverbFX,        color: colFX,         type: \fx),
+    (name: \CompFX,      synth: ~compFX,          color: colFX,         type: \fx),
+    (name: \DelayFX,     synth: ~delayFX,         color: colFX,         type: \fx),
+    (name: \SaturatorFX, synth: ~saturatorFX,     color: colFX,         type: \fx),
+
+    // Master
+    (name: \Master, synth: ~masterFader, color: colMaster, type: \fx)
+];
+
+// Solo handling
+soloActive
+
 
 
 (
@@ -115,7 +306,7 @@ rhythmicity from fluid/free to rhythmic/structured -> pulse emphasis
 
 // --- Pad Synths ---
 (
-SynthDef(\padSynth, { |freq = 440, amp = 0.2, gate = 1, pan = 0, atk = 2.0, rel = 4.0, ffreq = 100, rq = 0.2, modRate = 1, modDepth = 100, norm = 0.3, revMix = 0.3|
+SynthDef(\padSynth, { |out = 0, freq = 440, amp = 0.2, gate = 1, pan = 0, atk = 2.0, rel = 4.0, ffreq = 100, rq = 0.2, modRate = 1, modDepth = 100, norm = 0.3, revMix = 0.3|
     var osc, env, filt, mod, rev, snd;
 
     // Saw per voice
@@ -136,7 +327,7 @@ SynthDef(\padSynth, { |freq = 440, amp = 0.2, gate = 1, pan = 0, atk = 2.0, rel 
 
 	snd = rev * amp;
 
-    Out.ar(0, Pan2.ar(snd, pan));
+    Out.ar(out, Pan2.ar(snd, pan));
 }).add;
 )
 
@@ -189,7 +380,7 @@ SynthDef(\darkPad, { |out=0, freq=220, amp=0.1, norm = 0.3, ffreq=1000, darkPadS
 // --- Bass Synth ---
 (
 SynthDef(\bassSynth, {
-    |freq = 60, amp = 0.3, gate = 1, pan = 0, atk = 0.01, rel = 0.4,
+    |out = 0, freq = 60, amp = 0.3, gate = 1, pan = 0, atk = 0.01, rel = 0.4,
      ffreq = 200, rq = 0.3, subOct = 0.5, drive = 0.2|
 
     var osc, sub, mix, filt, env;
@@ -210,7 +401,7 @@ SynthDef(\bassSynth, {
     env = EnvGen.kr(Env.asr(atk, 1, rel), gate, doneAction: 2);
 
     // Output
-    Out.ar(0, Pan2.ar(filt * env * amp, pan));
+    Out.ar(out, Pan2.ar(filt * env * amp, pan));
 }).add;
 )
 
@@ -219,7 +410,7 @@ SynthDef(\bassSynth, {
 
 (
 SynthDef(\droneSynth, {
-    |out=0, freq=55, amp=0.2, pan=0, gate=1,
+    |out = 0, freq=55, amp=0.2, pan=0, gate=1,
      droneDetune=0.1, lfoRate=0.05, lfoDepth=0.01,
      ffreq=800, rq=0.3, revMix=0.4|
 
@@ -263,7 +454,7 @@ SynthDef(\droneSynth, {
 // --- Harp Synth ---
 
 (
-SynthDef(\harpPluck, { |out=0, freq=440, amp=0.2, decay=4, coef=0.3, pan=0,
+SynthDef(\harpPluck, { |out = 0, freq=440, amp=0.2, decay=4, coef=0.3, pan=0,
     revMix=0.3, revRoom=0.8, revDamp=0.5|
     var excEnv, exciter, string, body, panSig, rev, ampEnv, snd;
 
@@ -307,7 +498,7 @@ SynthDef(\harpPluck, { |out=0, freq=440, amp=0.2, decay=4, coef=0.3, pan=0,
 // --- Glass Arp Synth ---
 
 (
-SynthDef(\glassArp, { |out=0, freq=440, noiseLength=0.3, amp=0.2, atk=0.005, rel=2, pan=0,
+SynthDef(\glassArp, { |out = 0, freq=440, noiseLength=0.3, amp=0.2, atk=0.005, rel=2, pan=0,
     revMix=0.3, rq=0.05, bright=0.7, gate=1|
 
     var exc, excAmp, resonAmp, env, reson, partials, amps, rels, rev, snd, noise;
@@ -354,7 +545,7 @@ SynthDef(\glassArp, { |out=0, freq=440, noiseLength=0.3, amp=0.2, atk=0.005, rel
 // --- Bell Synth ---
 
 (
-SynthDef(\bell, { |out=0, freq=220, amp=0.3, pan=0, gate=1, lpfFactor=2, revMix=0.35, revRoom=1, revDamp=0.7|
+SynthDef(\bell, { |out = 0, freq=220, amp=0.3, pan=0, gate=1, lpfFactor=2, revMix=0.35, revRoom=1, revDamp=0.7|
     var snd, env, partials, freqs, amps, decays, body, rev;
 
     // main envelope (long exponential fade, gated)
@@ -392,7 +583,7 @@ SynthDef(\bell, { |out=0, freq=220, amp=0.3, pan=0, gate=1, lpfFactor=2, revMix=
 (
 // Sea like texture
 SynthDef(\seaSynth, {
-    |amp = 0.1, ffreq = 1000, rq = 0.3,
+    |out = 0, amp = 0.1, ffreq = 1000, rq = 0.3,
      modRate = 0.05, modDepth = 300, pan = 0,
      pinkAmt = 0.5, whiteAmt = 0.5, revMix = 0.5,
      waveRate = 0.03, waveDepth = 0.4,
@@ -418,7 +609,7 @@ SynthDef(\seaSynth, {
     // Reverb space
     rev = FreeVerb.ar(filt * env * amp * waveLFO, mix: revMix, room: 0.9, damp: 0.7);
 
-    Out.ar(0, Pan2.ar(rev, pan));
+    Out.ar(out, Pan2.ar(rev, pan));
 }).add;
 )
 
@@ -427,7 +618,7 @@ SynthDef(\seaSynth, {
 // Vinyl Crackle Synth
 (
 SynthDef(\vinylCrackle, {
-    |out=0, amp=0.1, dustDensity=3, lpFreq=4000, hpFreq=800,
+    |out = 0, amp=0.1, dustDensity=3, lpFreq=4000, hpFreq=800,
      rumbleLevel=0.1, rumbleFreq=50,
      humLevel=0.02,
      wowRate=0.3, wowDepth=0.05|
@@ -462,7 +653,7 @@ SynthDef(\vinylCrackle, {
 
 // Rain sound
 (
-SynthDef(\rainTexture, { |out=0, amp=0.2,
+SynthDef(\rainTexture, { |out = 0, amp=0.2,
     densFactor= 1, hp=400, lp=6000,
     revMix=0.25, rq=0.3, noiseAmp=0.3|
 
@@ -1347,8 +1538,8 @@ SynthDef(\rainTexture, { |out=0, amp=0.2,
     },
 
     // convert atk/sus also to seconds
-    \atk, Pfunc { |ev| ev[\atk] * ev[\dur] * thisThread.clock.beatDur },
-    \sus, Pfunc { |ev| ev[\sus] * ev[\dur] * thisThread.clock.beatDur },
+    \atk,       Pfunc { |ev| ev[\atk] * ev[\dur] * thisThread.clock.beatDur },
+    \sus,       Pfunc { |ev| ev[\sus] * ev[\dur] * thisThread.clock.beatDur },
 
     // synthesis params
     \ffreq,     1500,
@@ -1361,7 +1552,8 @@ SynthDef(\rainTexture, { |out=0, amp=0.2,
     \waveDepth, Pfunc({ ~mapLin.(~parameters[\density], 0, 1, 0.1, 0.6) }),
     \waveRate,  Pfunc({ ~mapLin.(~parameters[\variability], 0, 1, 0.02, 0.08) }),
     \pan,       Pwhite(-1.0, 1.0),
-    \amp,       Pfunc({ ~getMapped.(\seaAmp) * 0.0001})
+    \amp,       Pfunc({ ~getMapped.(\seaAmp) * 0.0001}),
+	\out,       ~seaBus
 );
 
 ~vinylPattern = Pmono(
@@ -1375,7 +1567,8 @@ SynthDef(\rainTexture, { |out=0, amp=0.2,
     \hpFreq,      Pwhite(500, 1500),
 	\humLevel,    Pfunc({ ~getMapped.(\humLevel) }),
     \rumbleLevel, Pfunc({ ~getMapped.(\rumbleLevel) }),
-    \amp, Pfunc({ ~getMapped.(\seaAmp) } * 0.0001)
+    \amp, Pfunc({ ~getMapped.(\seaAmp) } * 0.0001),
+	\out, ~vinylBus
 );
 
 ~rainPattern = Pmono(
@@ -1385,7 +1578,8 @@ SynthDef(\rainTexture, { |out=0, amp=0.2,
     \highpass, Pfunc({ ~mapLin.(~parameters[\brightness], 0, 1, 200, 2000) }),
     \lowpass,  Pfunc({ ~mapLin.(~parameters[\brightness], 0, 1, 3000, 8000) }),
     \revMix,   Pfunc({ ~getMapped.(\revMix) * 0.7 }),
-    \amp,      Pfunc({ ~getMapped.(\rainAmp) * 1 })
+    \amp,      Pfunc({ ~getMapped.(\rainAmp) * 1 }),
+	\out, ~rainBus
 );
 
 Pdef(\ambgen,
@@ -1467,7 +1661,8 @@ Pdef(\ambgen,
                     \atk,     ~getMapped.(\atk),
                     \rel,     ~getMapped.(\rel),
                     \rq,      ~getMapped.(\rq),
-					\amp,     ~getAmpForVoices.(chord.size) * 0.05
+					\amp,     ~getAmpForVoices.(chord.size) * 0.05,
+					\out,     ~padBus
                 ]));
             };
 
@@ -1487,7 +1682,8 @@ Pdef(\ambgen,
                     \atk,         ~getMapped.(\atk),
                     \rel,         ~getMapped.(\rel),
                     \rq,          ~getMapped.(\rq),
-                    \amp,         ~getAmpForVoices.(chord.size) * 0.2
+                    \amp,         ~getAmpForVoices.(chord.size) * 0.2,
+					\out,         ~darkPadBus
                 ]));
             };
 
@@ -1501,19 +1697,21 @@ Pdef(\ambgen,
                 \drive,  ~getMapped.(\drive),
                 \atk,    ~getMapped.(\atk),
                 \rel,    ~getMapped.(\rel),
-                \amp,    ~getMapped.(\bassAmp) * 0.1
+                \amp,    ~getMapped.(\bassAmp) * 0.1,
+				\out,    ~bassBus
             ]));
 
 			// spawn drone
 			droneSynths.add(Synth(\droneSynth, [
-				\freq, ~getDroneNote.(~droneDegrees.choose, 2).midicps,  // degree, octave shift
-				\droneDetune,  ~getMapped.(\droneDetune),
-				\lfoRate, ~getMapped.(\droneLfoRate),
-				\ffreq,   ~getMapped.(\filterCutoff),
-				\rq,      ~getMapped.(\rq),
-				\revMix,  ~getMapped.(\revMix) * 1.5,
-				\pan,     rrand(-0.5, 0.5),
-				\amp,     ~getMapped.(\droneAmp) * 0.6
+				\freq,        ~getDroneNote.(~droneDegrees.choose, 2).midicps,  // degree, octave shift
+				\droneDetune, ~getMapped.(\droneDetune),
+				\lfoRate,     ~getMapped.(\droneLfoRate),
+				\ffreq,       ~getMapped.(\filterCutoff),
+				\rq,          ~getMapped.(\rq),
+				\revMix,      ~getMapped.(\revMix) * 1.5,
+				\pan,         rrand(-0.5, 0.5),
+				\amp,         ~getMapped.(\droneAmp) * 0.6,
+				\out,         ~droneBus
 			]));
 
 			sp.par(
@@ -1524,7 +1722,8 @@ Pdef(\ambgen,
 					\decay, Pwhite(2, 5, inf),
 					\pan, Pwhite(-0.6, 0.6, inf),
 					\revMix, ~getMapped.(\revMix),
-					\amp, ~getMapped.(\harpAmp) * 0.5
+					\amp, ~getMapped.(\harpAmp) * 0.5,
+					\out, ~harpBus
 				)
 			);
 
@@ -1536,7 +1735,8 @@ Pdef(\ambgen,
 					\bright, ~getMapped.(\bright),
 					\pan, Pwhite(-0.6, 0.6, inf),
 					\revMix, ~getMapped.(\revMix) * 1.3,
-					\amp, ~getMapped.(\harpAmp) * 0.7
+					\amp, ~getMapped.(\harpAmp) * 0.7,
+					\out, ~glassBus
 				)
 			);
 
@@ -1548,7 +1748,7 @@ Pdef(\ambgen,
 					\freq, bassFreq * 2,
 					\lpfFactor, ~getMapped.(\lpfFactor),
 					\revMix, ~getMapped.(\revMix),
-					\amp, ~getMapped.(\bellAmp) * 1.2,
+					\amp, ~getMapped.(\bellAmp) * 0.8,
 					\type, Pseq({
 						var decisions = Array.fill(4, { \rest }); // 4 rests
 						var step = (0..3);
@@ -1570,7 +1770,8 @@ Pdef(\ambgen,
 							};
 						};
 						decisions
-					}.(), 1)
+					}.(), 1),
+					\out, ~bellBus
 				)
 			);
 
@@ -1768,8 +1969,13 @@ Pbind(
 // Rhythmicity: 0 (smooth/legato) → 1 (tight/rhythmic)
 ~setParam.(\rhythmicity, 0.3);
 
+// Show parameter settings
 ~parameters.postln;
-
 
 // Show mapped values
 ~showMappedParams.();
+
+// Show server information
+s.queryAllNodes;  // shows node tree
+SynthDescLib.global.browse; // browse all available defs
+
