@@ -520,15 +520,27 @@ rhythmicity from fluid/free to rhythmic/structured -> pulse emphasis
 };
 ~ensureParams.();
 
+// Control buses parameter
+~paramBuses = IdentityDictionary[
+    \warmth     -> Bus.control(s,1),
+    \brightness -> Bus.control(s,1),
+    \density    -> Bus.control(s,1),
+    \variability-> Bus.control(s,1),
+    \rhythmicity-> Bus.control(s,1)
+];
+
+// Linear mapping function
 ~mapLin = { |val, inMin=0, inMax=1, outMin=0, outMax=1|
 	((val - inMin) / (inMax - inMin)) * (outMax - outMin) + outMin;
 };
 
+// Exponential mapping function
 ~mapExp = { |val, inMin=0, inMax=1, outMin=100, outMax=8000|
 	var t = ((val - inMin) / (inMax - inMin)).clip(0,1);
 	outMin * ((outMax/outMin) ** t)
 };
 
+// Mapped parameters
 ~parameterMappings = (
 	crushMix:     { ~mapLin.(~parameters[\warmth],      0, 1, 0.25, 0.05) },
 	darkPadSub:   { ~mapLin.(~parameters[\warmth],      0, 1, 0.2, 0.8) },
@@ -581,15 +593,46 @@ rhythmicity from fluid/free to rhythmic/structured -> pulse emphasis
 	},
 );
 
-~setParam = { |key, val|
-	~ensureParams.();
-	~parameters[key] = val.clip(0, 1);
+// Mapped parametersfor buses
+~paramBuses = IdentityDictionary.new;
+~parameterMappings.keysDo { |key|
+    ~paramBuses[key] = Bus.control(s,1);
 };
 
+// Update buses
+~updateParamBuses = {
+    {
+        inf.do {
+            ~parameterMappings.keysValuesDo { |key, func|
+                var val = func.();
+                ~paramBuses[key].set(val);
+            };
+            0.1.wait;  // update every 100ms
+        }
+    }.fork(TempoClock.default);
+};
+
+// Quick set
+~setParam = { |key, val|
+	var mapped;
+    ~ensureParams.();
+    ~parameters[key] = val.clip(0,1);
+
+    // update mapped + bus
+    mapped = ~getMapped.(key);
+    if(mapped.notNil and: { ~paramBuses[key].notNil }) {
+        ~paramBuses[key].set(mapped);
+    };
+
+    ("[ParamUpdate] % = %, mapped → %".format(key, val, mapped)).postln;
+};
+
+// Sets multiple parameters
 ~setParams = { |pairs|
 	pairs.keysValuesDo { |k, v| ~setParam.(k, v) };
 };
 
+// Helpers
 ~getParam = { |param| ~parameters[param] };
 ~getMapped = { |param| var f = ~parameterMappings[param]; f !? { f.() } };
 
@@ -606,14 +649,26 @@ rhythmicity from fluid/free to rhythmic/structured -> pulse emphasis
 };
 )
 
-// --- Pad Synths ---
+
+// --- Intruments ---
+
 (
-SynthDef(\padSynth, { |out = 0, freq = 440, amp = 1, gate = 1, pan = 0, atk = 2.0, rel = 4.0, ffreq = 100, rq = 0.2, modRate = 1, modDepth = 100, norm = 0.3, revMix = 0.3|
+// Pad Synths
+SynthDef(\padSynth, { |out = 0, freq = 440, amp = 1, gate = 1, pan = 0|
     var osc, env, filt, mod, rev, snd;
+
+    // Live parameters from mapped buses
+    var norm     = In.kr(~paramBuses[\norm]);         // oscillator balance
+    var ffreq    = In.kr(~paramBuses[\filterCutoff]); // cutoff frequency (mapped from brightness)
+    var rq       = In.kr(~paramBuses[\rq]);           // filter resonance (brightness shaping)
+    var modRate  = In.kr(~paramBuses[\modRate]);      // LFO rate (variability → tempo-synced)
+    var modDepth = In.kr(~paramBuses[\modDepth]);     // LFO depth (warmth → detune/mod)
+    var revMix   = In.kr(~paramBuses[\revMix]);       // reverb wet/dry (density shaping)
+    var atk      = In.kr(~paramBuses[\atk]);          // attack time (rhythmicity shaping)
+    var rel      = In.kr(~paramBuses[\rel]);          // release time (rhythmicity shaping)
 
     // Saw per voice
     osc = Saw.ar(freq) * norm;
-
 
     // Filter modulation
     mod = SinOsc.kr(modRate, 0, modDepth, ffreq);
@@ -631,11 +686,23 @@ SynthDef(\padSynth, { |out = 0, freq = 440, amp = 1, gate = 1, pan = 0, atk = 2.
 
     Out.ar(out, Pan2.ar(snd, pan));
 }).add;
-)
 
-(
-SynthDef(\darkPad, { |out=0, freq=220, amp=0.1, norm = 0.3, ffreq=1000, darkPadSub=0.5, darkPadBits=8, crushMix=0.3, drive=0.1, distAmt=0.1, gate=1, atk=4, rel=8, rq=0.4, revMix=0.2|
+// Dark Pad
+SynthDef(\darkPad, { |out=0, freq=220, amp=0.1, gate=1|
     var osc, sub, mix, lfo, env, filt, dist, crush, chorus, rev;
+
+    // Live parameters from buses
+    var norm        = In.kr(~paramBuses[\norm]);          // oscillator balance
+    var darkPadSub  = In.kr(~paramBuses[\darkPadSub]);    // sub level
+    var darkPadBits = In.kr(~paramBuses[\darkPadBits]);   // bit depth
+    var crushMix    = In.kr(~paramBuses[\crushMix]);      // bitcrush amount
+    var drive       = In.kr(~paramBuses[\drive]);         // distortion drive
+    var distAmt     = In.kr(~paramBuses[\distAmt]);       // distortion wet/dry
+    var ffreq       = In.kr(~paramBuses[\darkPadCutoff]); // filter cutoff
+    var rq          = In.kr(~paramBuses[\rq]);            // filter resonance
+    var revMix      = In.kr(~paramBuses[\revMix]);        // reverb mix
+    var atk         = In.kr(~paramBuses[\atk]);           // attack
+    var rel         = In.kr(~paramBuses[\rel]);           // release
 
     // 2 saws slightly detuned (already thick enough)
     osc = Saw.ar(freq) * norm;
@@ -676,16 +743,19 @@ SynthDef(\darkPad, { |out=0, freq=220, amp=0.1, norm = 0.3, ffreq=1000, darkPadS
 
     Out.ar(out, rev * amp);
 }).add;
-)
 
-
-// --- Bass Synth ---
-(
-SynthDef(\bassSynth, {
-    |out = 0, freq = 60, amp = 0.3, gate = 1, pan = 0, atk = 0.01, rel = 0.4,
-     ffreq = 200, rq = 0.3, subOct = 0.5, drive = 0.2|
-
+// Bass Synth
+SynthDef(\bassSynth, { |out = 0, freq = 60, amp = 0.3, gate = 1, pan = 0|
     var osc, sub, mix, filt, env;
+
+    // Live parameters from mapped buses
+    var atk     = In.kr(~paramBuses[\atk]);          // attack (rhythmicity)
+    var rel     = In.kr(~paramBuses[\rel]);          // release (rhythmicity)
+    var ffreq   = In.kr(~paramBuses[\filterCutoff]); // filter cutoff (brightness)
+    var rq      = In.kr(~paramBuses[\rq]);           // resonance (brightness shaping)
+    var subOct  = In.kr(~paramBuses[\sub]);          // sub level (warmth/density)
+    var drive   = In.kr(~paramBuses[\drive]);        // drive/distortion (warmth)
+    var norm    = In.kr(~paramBuses[\bassAmp]);      // overall bass presence (density)
 
     // Main osc: pulse wave for bass body
     osc = Pulse.ar(freq, 0.45, 0.8);
@@ -705,18 +775,21 @@ SynthDef(\bassSynth, {
     // Output
     Out.ar(out, Pan2.ar(filt * env * amp, pan));
 }).add;
-)
 
+// Drone Synth
+SynthDef(\droneSynth, { |out = 0, freq = 55, amp = 0.2, pan = 0, gate = 1|
+    var osc, detuneFactors, detuned, lfo, filt, env, rev, snd, mid, side, stereo;
 
-// --- Drone Synth ---
-
-(
-SynthDef(\droneSynth, {
-    |out = 0, freq=55, amp=0.2, pan=0, gate=1,
-     droneDetune=0.1, lfoRate=0.05, lfoDepth=0.01,
-     ffreq=800, rq=0.3, revMix=0.4|
-
-	var osc, detuneFactors, detuned, lfo, filt, env, rev, snd, mid, side, stereo;
+    // Live parameters from mapped buses
+    var droneDetune = In.kr(~paramBuses[\droneDetune]);  // per-voice detune (warmth)
+    var lfoRate     = In.kr(~paramBuses[\droneLfoRate]); // very slow wobble (variability)
+    var lfoDepth    = In.kr(~paramBuses[\detune]);       // wobble depth (warmth/variability)
+    var ffreq       = In.kr(~paramBuses[\filterCutoff]); // filter cutoff (brightness)
+    var rq          = In.kr(~paramBuses[\rq]);           // resonance (brightness shaping)
+    var revMix      = In.kr(~paramBuses[\revMix]);       // reverb blend (density)
+    var atk         = In.kr(~paramBuses[\atk]);          // attack (rhythmicity)
+    var rel         = In.kr(~paramBuses[\rel]);          // release (rhythmicity)
+    var norm        = In.kr(~paramBuses[\droneAmp]);     // global drone level (density)
 
 	// store the multipliers first
 	detuneFactors = Array.fill(4, { LFNoise1.kr(0.1).range(1 - droneDetune, 1 + droneDetune) });
@@ -750,15 +823,15 @@ SynthDef(\droneSynth, {
 
     Out.ar(out, stereo * env * amp);
 }).add;
-)
 
-
-// --- Harp Synth ---
-
-(
-SynthDef(\harpPluck, { |out = 0, freq=440, amp=0.2, decay=4, coef=0.3, pan=0,
-    revMix=0.3, revRoom=0.8, revDamp=0.5|
+// Harp Synth
+SynthDef(\harpPluck, { |out = 0, freq = 440, decay=4, coef=0.3, revRoom=0.8, revDamp=0.5, amp = 0.2, pan = 0, gate = 1|
     var excEnv, exciter, string, body, panSig, rev, ampEnv, snd;
+
+    // Live parameters from mapped buses
+    var revMix  = In.kr(~paramBuses[\revMix]);     // reverb blend (density/space)
+    var atk     = In.kr(~paramBuses[\atk]);        // attach mapping from rhythmicity
+    var rel     = In.kr(~paramBuses[\rel]);        // release mapping from rhythmicity
 
     // Short exciter burst (noise impulse)
     excEnv = EnvGen.kr(Env.perc(0.001, 0.03, 1), doneAction: 0);
@@ -794,16 +867,16 @@ SynthDef(\harpPluck, { |out = 0, freq=440, amp=0.2, decay=4, coef=0.3, pan=0,
 
     Out.ar(out, snd);
 }).add;
-)
 
-
-// --- Glass Arp Synth ---
-
-(
-SynthDef(\glassArp, { |out = 0, freq=440, noiseLength=0.3, amp=0.2, atk=0.005, rel=2, pan=0,
-    revMix=0.3, rq=0.05, bright=0.7, gate=1|
-
+// Glass Arp Synth
+SynthDef(\glassArp, { |out = 0, freq = 440, amp = 0.2, noiseLength=0.3, gate = 1, pan = 0|
     var exc, excAmp, resonAmp, env, reson, partials, amps, rels, rev, snd, noise;
+
+    // Live parameters from mapped buses
+    var atk         = In.kr(~paramBuses[\atk]);         // attack → rhythmicity
+    var rel         = In.kr(~paramBuses[\rel]);         // release → rhythmicity
+    var bright      = In.kr(~paramBuses[\bright]);      // brightness → partial emphasis
+    var revMix      = In.kr(~paramBuses[\revMix]);      // reverb mix
 
 	// Air
 	noise = tanh(PinkNoise.ar(noiseLength) * 2) * 0.5;
@@ -811,10 +884,6 @@ SynthDef(\glassArp, { |out = 0, freq=440, noiseLength=0.3, amp=0.2, atk=0.005, r
 
     // Exciter: short burst of noise + sine
     exc = noise + SinOsc.ar(freq, 0, 0.3);
-
-	// Debug: measure amplitude of exc
-/*	excAmp = Amplitude.kr(exc, 0.01, 0.01); // fast envelope follower
-	Poll.kr(Impulse.kr(5), excAmp, "exc amplitude");*/
 
     // Envelope for exciter
     env = EnvGen.kr(Env.perc(atk, rel), gate, doneAction: 2);
@@ -827,9 +896,6 @@ SynthDef(\glassArp, { |out = 0, freq=440, noiseLength=0.3, amp=0.2, atk=0.005, r
 		Ringz.ar(exc, freq * partials[i], rels[i], amps[i])
 	}) * 0.002);
 
-/*	resonAmp = Amplitude.kr(reson, 0.01, 0.01);
-	Poll.kr(Impulse.kr(5), resonAmp, "reson amplitude");*/
-
     // Brightness control (emphasize high partials)
     reson = reson * bright + LPF.ar(reson, 2000 * bright);
 
@@ -841,14 +907,17 @@ SynthDef(\glassArp, { |out = 0, freq=440, noiseLength=0.3, amp=0.2, atk=0.005, r
 
     Out.ar(out, snd);
 }).add;
-)
 
-
-// --- Bell Synth ---
-
-(
-SynthDef(\bell, { |out = 0, freq=220, amp=0.3, pan=0, gate=1, lpfFactor=2, revMix=0.35, revRoom=1, revDamp=0.7|
+// Bell Synth
+// Bell Synth (bus-driven)
+SynthDef(\bell, { |out = 0, freq = 220, amp = 0.3, pan = 0, gate = 1, revRoom=1, revDamp=0.7|
     var snd, env, partials, freqs, amps, decays, body, rev;
+
+    // Live parameters from mapped buses
+    var lpfFactor = In.kr(~paramBuses[\lpfFactor]);   // low-pass factor → warmth/brightness
+    var revMix    = In.kr(~paramBuses[\revMix]);      // reverb mix → density
+    var atk       = In.kr(~paramBuses[\atk]);         // attack (percussive vs swelling)
+    var rel       = In.kr(~paramBuses[\rel]);         // release time
 
     // main envelope (long exponential fade, gated)
     env = EnvGen.kr(Env.asr(0.01, 1, 6, curve: -10), gate, doneAction:2);
@@ -877,21 +946,26 @@ SynthDef(\bell, { |out = 0, freq=220, amp=0.3, pan=0, gate=1, lpfFactor=2, revMi
     // gentle saturation for fullness
     Out.ar(out, (rev * 3).tanh * env);
 }).add;
-)
 
+// Textrure Synths
 
-// --- Textrure Synths ---
-
-(
-// Sea like texture
-SynthDef(\seaSynth, {
-    |out = 0, amp = 0.1, ffreq = 1000, rq = 0.3,
-     modRate = 0.05, modDepth = 300, pan = 0,
-     pinkAmt = 0.5, whiteAmt = 0.5, revMix = 0.5,
-     waveRate = 0.03, waveDepth = 0.4,
-     atk = 4, sus = 1, rel = 6|  // swell timing in seconds
-
+// Sea Sound
+// Sea Texture (bus-driven)
+SynthDef(\seaSynth, { |out = 0, amp = 0.1, pan = 0, sus = 1, gate = 1|
     var src, mod, filt, env, rev, waveLFO;
+
+    // Live parameters from mapped buses
+    var ffreq     = In.kr(~paramBuses[\filterCutoff]);   // filter cutoff ← brightness
+    var rq        = In.kr(~paramBuses[\rq]);             // resonance ← variability
+    var modRate   = In.kr(~paramBuses[\modRate]);        // filter wobble rate ← rhythmicity
+    var modDepth  = In.kr(~paramBuses[\modDepth]);       // filter wobble depth ← variability
+    var pinkAmt   = In.kr(~paramBuses[\noisePink]);      // pink noise share ← warmth
+    var whiteAmt  = In.kr(~paramBuses[\noiseWhite]);     // white noise share ← brightness
+    var revMix    = In.kr(~paramBuses[\revMix]);         // reverb mix ← density
+    var waveRate  = In.kr(~paramBuses[\droneLfoRate]);   // slow wave swell rate ← variability
+    var waveDepth = In.kr(~paramBuses[\seaAmp]);         // swell depth ← density / scene
+    var atk       = In.kr(~paramBuses[\atk]);            // envelope attack ← rhythmicity
+    var rel       = In.kr(~paramBuses[\rel]);            // envelope release ← rhythmicity
 
     // Noise source (warm)
     src = PinkNoise.ar(pinkAmt) + WhiteNoise.ar(whiteAmt);
@@ -913,22 +987,22 @@ SynthDef(\seaSynth, {
 
     Out.ar(out, Pan2.ar(rev, pan));
 }).add;
-)
 
-)
-
-// Vinyl Crackle Synth
-(
-SynthDef(\vinylCrackle, {
-    |out = 0, amp=0.5, dustDensity=3, lpFreq=4000, hpFreq=800,
-     rumbleLevel=0.1, rumbleFreq=50,
-     humLevel=0.02,
-     wowRate=0.3, wowDepth=0.05|
-
+// Vinyl Crackle
+SynthDef(\vinylCrackle, { |out = 0, amp = 0.5, dustDensity=3|
     var trig, env, src, filtered, grainAmp, grainRel, saturated;
     var rumble, hum, wow, mix, panned;
 
-    // --- Crackles ---
+    // Live parameters from buses
+    var lpFreq      = In.kr(~paramBuses[\filterCutoff]);   // LP cutoff (brightness)
+    var hpFreq      = In.kr(~paramBuses[\lpfFactor]);      // HP cutoff (variability / scene)
+    var rumbleLevel = In.kr(~paramBuses[\rumbleLevel]);    // low rumble gain
+    var rumbleFreq  = In.kr(~paramBuses[\sub]);            // rumble cutoff frequency
+    var humLevel    = In.kr(~paramBuses[\humLevel]);       // hum gain
+    var wowRate     = In.kr(~paramBuses[\modRate]);        // wow speed (rhythmicity)
+    var wowDepth    = In.kr(~paramBuses[\modDepth]);       // wow depth (variability)
+
+    // Crackles
     trig = Dust.kr(dustDensity);
     grainAmp = TRand.kr(0.1, 1.0, trig);      // per-grain random amp
     grainRel = TRand.kr(0.003, 0.005, trig);  // per-grain random length
@@ -937,29 +1011,31 @@ SynthDef(\vinylCrackle, {
     filtered = HPF.ar(LPF.ar(src, lpFreq), hpFreq);
 	saturated = tanh(filtered * 5);
 
-    // --- Mechanical rumble (low brown noise) ---
+    // Mechanical rumble (low brown noise)
     rumble = LPF.ar(BrownNoise.ar(rumbleLevel), rumbleFreq);
 
-    // --- Electrical hum (fundamental + harmonics) ---
+    // Electrical hum (fundamental + harmonics)
     hum = (SinOsc.ar(50) + 0.5 * SinOsc.ar(100) + 0.25 * SinOsc.ar(150)) * humLevel;
 
-    // --- Wow/flutter (slow amplitude wobble) ---
+    // Wow/flutter (slow amplitude wobble)
     wow = SinOsc.kr(wowRate, 0, wowDepth, 1);
 
-    // --- Mix & output ---
+    // Mix & output
     mix = (saturated + rumble + hum) * wow;
     panned = Pan2.ar(mix, LFNoise1.kr(5).range(-0.5, 0.5));
     Out.ar(out, panned);
 }).add;
-)
 
-// Rain sound
-(
-SynthDef(\rainTexture, { |out = 0, amp=0.2,
-    densFactor= 1, hp=400, lp=6000,
-    revMix=0.25, rq=0.3, noiseAmp=0.3|
+// Rain Sound
+// Rain Texture (bus-driven)
+SynthDef(\rainTexture, { |out = 0, densFactor = 1, hp=400, lp=6000, amp=0.2|
+    var trigNear, trigFar, nearDrops, farDrops, noiseBed, rain, rev;
+    var densFar, densNear, revMix, rq, noiseAmp;
 
-    var trigNear, trigFar, nearDrops, farDrops, noiseBed, rain, rev, densNear, densFar;
+    // Live parameters from buses
+    rq         = In.kr(~paramBuses[\rq]);          // resonance shaping
+    noiseAmp   = In.kr(~paramBuses[\noiseAmp]);    // background noise balance
+    revMix     = In.kr(~paramBuses[\revMix]);      // wet/dry reverb
 
 	densNear = 10 * densFactor;
 	densFar  = 100 * densFactor;
