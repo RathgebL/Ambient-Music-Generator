@@ -1,3 +1,4 @@
+s.options.numAudioBusChannels = 512;
 s.reboot;
 s.scope;
 s.meter;
@@ -7,18 +8,47 @@ s.plotTree;
 (
 // --- Mixing Engine ---
 
-// Simple fader SynthDef
-SynthDef(\fader, { |inBus, outBus, amp=1.0|
-    var sig = In.ar(inBus, 2) * amp;
+// Top-level groups
+~mixerGroup    = Group.head(s);   // holds the whole mixer
+~sourcesGroup  = Group.head(~mixerGroup);  // instrument synths (pads, bass, etc.)
+~fadersGroup   = Group.after(~sourcesGroup); // instrument faders
+~groupFadersGroup = Group.after(~fadersGroup); // group faders
+~sendsGroup    = Group.after(~groupFadersGroup);  // multiSends
+~fxsGroup       = Group.after(~sendsGroup);   // FX processors
+~masterGroup   = Group.after(~fxsGroup);      // final master fader
+
+// Fader with control bus
+SynthDef(\fader, { |inBus, outBus, ctrlBus|
+    var sig = In.ar(inBus, 2) * In.kr(ctrlBus, 1);
+
+    // print RMS amplitude of each channel every 0.1 sec
+	Poll.kr(Impulse.kr(10), Amplitude.kr(sig[0]), label: "fader L");
+	// Poll.kr(Impulse.kr(10), Amplitude.kr(sig[1]), label: "fader R");
+
+    Out.ar(outBus, sig);
+}).add;
+
+// Fader with control bus
+SynthDef(\groupfader, { |inBus, outBus, ctrlBus|
+    var sig = In.ar(inBus, 2) * In.kr(ctrlBus, 1);
+
+    // print RMS amplitude of each channel every 0.1 sec
+	Poll.kr(Impulse.kr(10), Amplitude.kr(sig[0]), label: "group fader L");
+	// Poll.kr(Impulse.kr(10), Amplitude.kr(sig[1]), label: "group fader R");
+
     Out.ar(outBus, sig);
 }).add;
 
 // Multi-send: tap one input bus, send copies to multiple FX buses
-SynthDef(\multiSend, { |inBus, revBus, compBus, delayBus, satBus, amp=0.5|
+SynthDef(\multiSend, { |inBus, revBus, compBus, delBus, satBus, amp=1|
     var sig = In.ar(inBus, 2) * amp;
+
+	Poll.kr(Impulse.kr(10), Amplitude.kr(sig[0]), label: "send tap L");
+	// Poll.kr(Impulse.kr(10), Amplitude.kr(sig[1]), label: "send tap R");
+
     Out.ar(revBus, sig);
     Out.ar(compBus, sig);
-    Out.ar(delayBus, sig);
+    Out.ar(delBus, sig);
     Out.ar(satBus, sig);
 }).add;
 
@@ -27,7 +57,11 @@ SynthDef(\fxReverb, { |inBus=0, outBus=0, room=0.9, damp=0.5, mix=1.0|
     var in, sig;
 	in = In.ar(inBus, 2);
     sig = FreeVerb2.ar(in[0], in[1], mix, room, damp); // always wet
-    Out.ar(outBus, sig);
+
+	Poll.kr(Impulse.kr(10), Amplitude.kr(sig[0]), label: "rev tap L");
+	// Poll.kr(Impulse.kr(10), Amplitude.kr(sig[1]), label: "rev tap R");
+
+	Out.ar(outBus, sig);
 }).add;
 
 // FX compression
@@ -70,76 +104,112 @@ SynthDef(\masterFader, { |inBus=0, outBus=0|
     sig = FreeVerb2.ar(sig[0], sig[1], mix: 0.1, room: 0.7, damp: 0.5);
 	sig = Limiter.ar(sig, 0.9);
 
+	Poll.kr(Impulse.kr(10), Amplitude.kr(sig[0]), label: "Master tap L");
+    Poll.kr(Impulse.kr(10), Amplitude.kr(sig[1]), label: "Master tap R");
+
 	Out.ar(outBus, sig);
 }).add;
 
-// Master buses
-~masterBus      = Bus.audio(s, 2);
+// Audio Buses
+// Master bus
+~masterBus       = Bus.audio(s, 2);
 
 // Instrument buses
-~padBus        = Bus.audio(s, 2);
-~darkPadBus    = Bus.audio(s, 2);
-~bassBus       = Bus.audio(s, 2);
-~droneBus      = Bus.audio(s, 2);
-~harpBus       = Bus.audio(s, 2);
-~glassBus      = Bus.audio(s, 2);
-~bellBus       = Bus.audio(s, 2);
-~seaTexBus     = Bus.audio(s, 2);
-~rainTexBus    = Bus.audio(s, 2);
-~vinylTexBus   = Bus.audio(s, 2);
+~padBus          = Bus.audio(s, 2);
+~darkPadBus      = Bus.audio(s, 2);
+~bassBus         = Bus.audio(s, 2);
+~droneBus        = Bus.audio(s, 2);
+~harpBus         = Bus.audio(s, 2);
+~glassBus        = Bus.audio(s, 2);
+~bellBus         = Bus.audio(s, 2);
+~seaBus          = Bus.audio(s, 2);
+~rainBus         = Bus.audio(s, 2);
+~vinylBus        = Bus.audio(s, 2);
 
 // FX buses
-~revBus        = Bus.audio(s, 2);
-~compBus       = Bus.audio(s, 2);
-~delBus        = Bus.audio(s, 2);
-~satBus        = Bus.audio(s, 2);
+~revBus          = Bus.audio(s, 2);
+~compBus         = Bus.audio(s, 2);
+~delBus          = Bus.audio(s, 2);
+~satBus          = Bus.audio(s, 2);
 
 // Group buses
-~fxGroup       = Bus.audio(s, 2);
-~padGroupBus   = Bus.audio(s, 2);
-~bassGroupBus  = Bus.audio(s, 2);
-~droneGroupBus = Bus.audio(s, 2);
-~bellGroupBus  = Bus.audio(s, 2);
-~arpGroupBus   = Bus.audio(s, 2);
-~texGroupBus   = Bus.audio(s, 2);
+~padGroupBus     = Bus.audio(s, 2);
+~bassGroupBus    = Bus.audio(s, 2);
+~droneGroupBus   = Bus.audio(s, 2);
+~bellGroupBus    = Bus.audio(s, 2);
+~arpGroupBus     = Bus.audio(s, 2);
+~texGroupBus     = Bus.audio(s, 2);
+~fxGroup         = Bus.audio(s, 2);
+
+// Control buses
+// Master control
+~masterCtrl      = Bus.control(s, 1).set(10);
+
+// Instrument control
+~padCtrl         = Bus.control(s, 1).set(5);
+~darkPadCtrl     = Bus.control(s, 1).set(5);
+~bassCtrl        = Bus.control(s, 1).set(3);
+~droneCtrl       = Bus.control(s, 1).set(6);
+~bellCtrl        = Bus.control(s, 1).set(6);
+~harpCtrl        = Bus.control(s, 1).set(5);
+~glassCtrl       = Bus.control(s, 1).set(5);
+~seaCtrl         = Bus.control(s, 1).set(3);
+~rainCtrl        = Bus.control(s, 1).set(3);
+~vinylCtrl       = Bus.control(s, 1).set(3);
+
+// FX control
+~revCtrl         = Bus.control(s, 1).set(5);
+~compCtrl        = Bus.control(s, 1).set(5);
+~delCtrl         = Bus.control(s, 1).set(5);
+~satCtrl         = Bus.control(s, 1).set(5);
+
+// Groups control
+~padGroupCtrl    = Bus.control(s, 1).set(5);
+~bassGroupCtrl   = Bus.control(s, 1).set(3);
+~droneGroupCtrl  = Bus.control(s, 1).set(6);
+~bellGroupCtrl   = Bus.control(s, 1).set(6);
+~arpGroupCtrl    = Bus.control(s, 1).set(5);
+~texGroupCtrl    = Bus.control(s, 1).set(3);
+~fxGroupCtrl     = Bus.control(s, 1).set(3);
 
 // Instrument faders
-~padFader        = Synth(\fader,       [\inBus, ~padBus,        \outBus, ~padGroupBus,   \amp, 0.5]);
-~darkPadFader    = Synth(\fader,       [\inBus, ~darkPadBus,    \outBus, ~padGroupBus,   \amp, 0.5]);
-~bassFader       = Synth(\fader,       [\inBus, ~bassBus,       \outBus, ~bassGroupBus,  \amp, 0.3]);
-~droneFader      = Synth(\fader,       [\inBus, ~droneBus,      \outBus, ~droneGroupBus, \amp, 0.6]);
-~bellFader       = Synth(\fader,       [\inBus, ~bellBus,       \outBus, ~bellGroupBus,  \amp, 0.6]);
-~harparpFader    = Synth(\fader,       [\inBus, ~harpArpBus,    \outBus, ~arpGroupBus,   \amp, 0.5]);
-~glassarpFader   = Synth(\fader,       [\inBus, ~glassArpBus,   \outBus, ~arpGroupBus,   \amp, 0.5]);
-~seaTexFader     = Synth(\fader,       [\inBus, ~seaTexBus,     \outBus, ~texGroupBus,   \amp, 0.3]);
-~rainTexFader    = Synth(\fader,       [\inBus, ~rainTexpBus,   \outBus, ~texGroupBus,   \amp, 0.3]);
-~vinylTexFader   = Synth(\fader,       [\inBus, ~vinylTexpBus,  \outBus, ~texGroupBus,   \amp, 0.3]);
+~padFader        = Synth(\fader,       [\inBus, ~padBus,        \outBus, ~padGroupBus,   \ctrlBus, ~padCtrl],        target: ~fadersGroup);
+~darkPadFader    = Synth(\fader,       [\inBus, ~darkPadBus,    \outBus, ~padGroupBus,   \ctrlBus, ~darkPadCtrl],    target: ~fadersGroup);
+~bassFader       = Synth(\fader,       [\inBus, ~bassBus,       \outBus, ~bassGroupBus,   \ctrlBus, ~bassCtrl],       target: ~fadersGroup);
+~droneFader      = Synth(\fader,       [\inBus, ~droneBus,      \outBus, ~droneGroupBus, \ctrlBus, ~droneCtrl],      target: ~fadersGroup);
+~bellFader       = Synth(\fader,       [\inBus, ~bellBus,       \outBus, ~bellGroupBus,  \ctrlBus, ~bellCtrl],       target: ~fadersGroup);
+~harpFader       = Synth(\fader,       [\inBus, ~harpBus,       \outBus, ~arpGroupBus,   \ctrlBus, ~harpCtrl],       target: ~fadersGroup);
+~glassFader      = Synth(\fader,       [\inBus, ~glassBus,      \outBus, ~arpGroupBus,   \ctrlBus, ~glassCtrl],      target: ~fadersGroup);
+~seaFader        = Synth(\fader,       [\inBus, ~seaBus,        \outBus, ~texGroupBus,   \ctrlBus, ~seaCtrl],        target: ~fadersGroup);
+~rainFader       = Synth(\fader,       [\inBus, ~rainBus,       \outBus, ~texGroupBus,   \ctrlBus, ~rainCtrl],       target: ~fadersGroup);
+~vinylFader      = Synth(\fader,       [\inBus, ~vinylBus,      \outBus, ~texGroupBus,   \ctrlBus, ~vinylCtrl],      target: ~fadersGroup);
 
 // Group faders
-~padGroupFader   = Synth(\fader,       [\inBus, ~padGroupBus,   \outBus, ~masterBus,     \amp, 0.5]);
-~bassGroupFader  = Synth(\fader,       [\inBus, ~bassGroupBus,  \outBus, ~masterBus,     \amp, 0.3]);
-~droneGroupFader = Synth(\fader,       [\inBus, ~droneGroupBus, \outBus, ~masterBus,     \amp, 0.6]);
-~bellGroupFader  = Synth(\fader,       [\inBus, ~bellGroupBus,  \outBus, ~masterBus,     \amp, 0.6]);
-~arpGroupFader   = Synth(\fader,       [\inBus, ~arpGroupBus,   \outBus, ~masterBus,     \amp, 0.5]);
-~texGroupFader   = Synth(\fader,       [\inBus, ~texGroupBus,   \outBus, ~masterBus,     \amp, 0.3]);
-~fxGroupFader    = Synth(\fader,       [\inBus, ~fxBus,         \outBus, ~masterBus,     \amp, 0.3]);
+~padGroupFader   = Synth(\groupfader,  [\inBus, ~padGroupBus,   \outBus, ~masterBus,     \ctrlBus, ~padGroupCtrl],   target: ~groupFadersGroup);
+~bassGroupFader  = Synth(\groupfader,  [\inBus, ~bassGroupBus,  \outBus, ~masterBus,     \ctrlBus, ~bassGroupCtrl],  target: ~groupFadersGroup);
+~droneGroupFader = Synth(\groupfader,  [\inBus, ~droneGroupBus, \outBus, ~masterBus,     \ctrlBus, ~droneGroupCtrl], target: ~groupFadersGroup);
+~bellGroupFader  = Synth(\groupfader,  [\inBus, ~bellGroupBus,  \outBus, ~masterBus,     \ctrlBus, ~bellGroupCtrl],  target: ~groupFadersGroup);
+~arpGroupFader   = Synth(\groupfader,  [\inBus, ~arpGroupBus,   \outBus, ~masterBus,     \ctrlBus, ~arpGroupCtrl],   target: ~groupFadersGroup);
+~texGroupFader   = Synth(\groupfader,  [\inBus, ~texGroupBus,   \outBus, ~masterBus,     \ctrlBus, ~texGroupCtrl],   target: ~groupFadersGroup);
+~fxGroupFader    = Synth(\groupfader,  [\inBus, ~fxGroup,       \outBus, ~masterBus,     \ctrlBus, ~fxGroupCtrl],    target: ~groupFadersGroup);
 
 // FX sends
-~padGroupSend    = Synth(\multiSend,   [\inBus, ~padGroupBus,   \revBus, ~revBus, \compBus, ~compBus, \delayBus, ~delBus, \satBus, ~satBus, \amp, 0.5]);
-~bassGroupSend   = Synth(\multiSend,   [\inBus, ~bassGroupBus,  \revBus, ~revBus, \compBus, ~compBus, \delayBus, ~delBus, \satBus, ~satBus, \amp, 0.5]);
-~droneGroupSend  = Synth(\multiSend,   [\inBus, ~droneGroupBus, \revBus, ~revBus, \compBus, ~compBus, \delayBus, ~delBus, \satBus, ~satBus, \amp, 0.5]);
-~bellGroupSend   = Synth(\multiSend,   [\inBus, ~bellGroupBus,  \revBus, ~revBus, \compBus, ~compBus, \delayBus, ~delBus, \satBus, ~satBus, \amp, 0.5]);
-~arpGroupSend    = Synth(\multiSend,   [\inBus, ~arpGroupBus,   \revBus, ~revBus, \compBus, ~compBus, \delayBus, ~delBus, \satBus, ~satBus, \amp, 0.5]);
-~texGroupSend    = Synth(\multiSend,   [\inBus, ~texGroupBus,   \revBus, ~revBus, \compBus, ~compBus, \delayBus, ~delBus, \satBus, ~satBus, \amp, 0.5]);
+~padGroupSend    = Synth(\multiSend,   [\inBus, ~padGroupBus,   \revBus, ~revBus, \compBus, ~compBus, \delBus, ~delBus, \satBus, ~satBus, \ctrlBus, ~padGroupCtrl],   target: ~sendsGroup);
+~bassGroupSend   = Synth(\multiSend,   [\inBus, ~bassGroupBus,  \revBus, ~revBus, \compBus, ~compBus, \delBus, ~delBus, \satBus, ~satBus, \ctrlBus, ~bassGroupCtrl],  target: ~sendsGroup);
+~droneGroupSend  = Synth(\multiSend,   [\inBus, ~droneGroupBus, \revBus, ~revBus, \compBus, ~compBus, \delBus, ~delBus, \satBus, ~satBus, \ctrlBus, ~droneGroupCtrl], target: ~sendsGroup);
+~bellGroupSend   = Synth(\multiSend,   [\inBus, ~bellGroupBus,  \revBus, ~revBus, \compBus, ~compBus, \delBus, ~delBus, \satBus, ~satBus, \ctrlBus, ~bellGroupCtrl],  target: ~sendsGroup);
+~arpGroupSend    = Synth(\multiSend,   [\inBus, ~arpGroupBus,   \revBus, ~revBus, \compBus, ~compBus, \delBus, ~delBus, \satBus, ~satBus, \ctrlBus, ~arpGroupCtrl],   target: ~sendsGroup);
+~texGroupSend    = Synth(\multiSend,   [\inBus, ~texGroupBus,   \revBus, ~revBus, \compBus, ~compBus, \delBus, ~delBus, \satBus, ~satBus, \ctrlBus, ~texGroupCtrl],   target: ~sendsGroup);
 
-// Instantiate FX processors
-~reverbFX        = Synth(\fxReverb,    [\inBus, ~revBus,        \outBus, ~fxGroup]);
-~compFX          = Synth(\fxComp,      [\inBus, ~compBus,       \outBus, ~fxGroup]);
-~delayFX         = Synth(\fxDelay,     [\inBus, ~delBus,        \outBus, ~fxGroup]);
-~saturatorFX     = Synth(\fxSaturator, [\inBus, ~satBus,        \outBus, ~fxGroup]);
+
+// FX processors
+~reverbFX        = Synth(\fxReverb,    [\inBus, ~revBus,        \outBus, ~fxGroup], target: ~fxsGroup);
+~compFX          = Synth(\fxComp,      [\inBus, ~compBus,       \outBus, ~fxGroup], target: ~fxsGroup);
+~delayFX         = Synth(\fxDelay,     [\inBus, ~delBus,        \outBus, ~fxGroup], target: ~fxsGroup);
+~saturatorFX     = Synth(\fxSaturator, [\inBus, ~satBus,        \outBus, ~fxGroup], target: ~fxsGroup);
 
 // Master fader
-~masterFader     = Synth(\masterFader, [\inBus, ~masterBus, \outBus, 0]);
+~masterFader     = Synth(\masterFader, [\inBus, ~masterBus,     \outBus, 0], target: ~masterGroup);
 )
 
 
@@ -154,44 +224,192 @@ colGroup      = Color(0.7, 0.9, 0.7);  // greenish
 colFX         = Color(0.7, 0.7, 0.9);  // bluish
 colMaster     = Color(1, 0.6, 0.2);    // orange
 
-
 // Channel definitions
-// Now each channel is a dictionary with named keys
+// Each channel is a dictionary with name, synth, color, type, and ctrlBus
 channels = [
     // Instrument level
-    (name: \Pad,         synth: ~padFader,        color: colInstrument, type: \instrument),
-    (name: \DarkPad,     synth: ~darkPadFader,    color: colInstrument, type: \instrument),
-    (name: \Bass,        synth: ~bassFader,       color: colInstrument, type: \instrument),
-    (name: \Drone,       synth: ~droneFader,      color: colInstrument, type: \instrument),
-    (name: \Bell,        synth: ~bellFader,       color: colInstrument, type: \instrument),
-    (name: \HarpArp,     synth: ~harparpFader,    color: colInstrument, type: \instrument),
-    (name: \GlassArp,    synth: ~glassarpFader,   color: colInstrument, type: \instrument),
-    (name: \SeaTex,      synth: ~seaTexFader,     color: colInstrument, type: \instrument),
-    (name: \RainTex,     synth: ~rainTexFader,    color: colInstrument, type: \instrument),
-    (name: \VinylTex,    synth: ~vinylTexFader,   color: colInstrument, type: \instrument),
+    (name: \Pad,         color: colInstrument, type: \instrument, ctrlBus: ~padCtrl),
+    (name: \DarkPad,     color: colInstrument, type: \instrument, ctrlBus: ~darkPadCtrl),
+    (name: \Bass,        color: colInstrument, type: \instrument, ctrlBus: ~bassCtrl),
+    (name: \Drone,       color: colInstrument, type: \instrument, ctrlBus: ~droneCtrl),
+    (name: \Bell,        color: colInstrument, type: \instrument, ctrlBus: ~bellCtrl),
+    (name: \HarpArp,     color: colInstrument, type: \instrument, ctrlBus: ~harpCtrl),
+    (name: \GlassArp,    color: colInstrument, type: \instrument, ctrlBus: ~glassCtrl),
+    (name: \SeaTex,      color: colInstrument, type: \instrument, ctrlBus: ~seaCtrl),
+    (name: \RainTex,     color: colInstrument, type: \instrument, ctrlBus: ~rainCtrl),
+    (name: \VinylTex,    color: colInstrument, type: \instrument, ctrlBus: ~vinylCtrl),
 
     // Group level
-    (name: \PadGroup,    synth: ~padGroupFader,   color: colGroup,      type: \group),
-    (name: \BassGroup,   synth: ~bassGroupFader,  color: colGroup,      type: \group),
-    (name: \DroneGroup,  synth: ~droneGroupFader, color: colGroup,      type: \group),
-    (name: \BellGroup,   synth: ~bellGroupFader,  color: colGroup,      type: \group),
-    (name: \ArpGroup,    synth: ~arpGroupFader,   color: colGroup,      type: \group),
-    (name: \TexGroup,    synth: ~texGroupFader,   color: colGroup,      type: \group),
-    (name: \FXGroup,     synth: ~fxGroupFader,    color: colGroup,      type: \group),
+    (name: \PadGroup,    color: colGroup,      type: \group,      ctrlBus: ~padGroupCtrl),
+    (name: \BassGroup,   color: colGroup,      type: \group,      ctrlBus: ~bassGroupCtrl),
+    (name: \DroneGroup,  color: colGroup,      type: \group,      ctrlBus: ~droneGroupCtrl),
+    (name: \BellGroup,   color: colGroup,      type: \group,      ctrlBus: ~bellGroupCtrl),
+    (name: \ArpGroup,    color: colGroup,      type: \group,      ctrlBus: ~arpGroupCtrl),
+    (name: \TexGroup,    color: colGroup,      type: \group,      ctrlBus: ~texGroupCtrl),
+    (name: \FXGroup,     color: colGroup,      type: \group,      ctrlBus: ~fxGroupCtrl),
 
     // FX return level
-    (name: \ReverbFX,    synth: ~reverbFX,        color: colFX,         type: \fx),
-    (name: \CompFX,      synth: ~compFX,          color: colFX,         type: \fx),
-    (name: \DelayFX,     synth: ~delayFX,         color: colFX,         type: \fx),
-    (name: \SaturatorFX, synth: ~saturatorFX,     color: colFX,         type: \fx),
+    (name: \ReverbFX,    color: colFX,         type: \fx,         ctrlBus: ~revCtrl),
+    (name: \CompFX,      color: colFX,         type: \fx,         ctrlBus: ~compCtrl),
+    (name: \DelayFX,     color: colFX,         type: \fx,         ctrlBus: ~delCtrl),
+    (name: \SaturatorFX, color: colFX,         type: \fx,         ctrlBus: ~satCtrl),
 
     // Master
-    (name: \Master, synth: ~masterFader, color: colMaster, type: \fx)
+    (name: \Master, synth: ~masterFader, color: colMaster, type: \fx, ctrlBus: ~masterCtrl)
 ];
 
 // Solo handling
-soloActive
+soloActive = false;
 
+updateStates = {
+    var soloed = channels.select { |c| c[\solo].notNil and: { c[\solo].value == 1 } };
+    soloActive = soloed.notEmpty;
+
+    channels.do { |c|
+        var synth = c[\synth];
+        var mute = (c[\mute].notNil and: { c[\mute].value == 1 });
+        var isSolo = (c[\solo].notNil and: { c[\solo].value == 1 });
+        var val = (c[\slider].notNil).if({ c[\slider].value }, { 0.5 });
+
+        if(synth.notNil) {
+            if(soloActive) {
+                synth.set(\amp, if(isSolo and: { mute.not }, val, 0));
+            } {
+                synth.set(\amp, if(mute, 0, val));
+            };
+        };
+    };
+};
+
+// GUI window
+win = Window("AMBIENT MUSIC GENERATOR Mixer", Rect(50, 50, channels.size * 100, 500)).front;
+
+// Counters for xOffset
+rowIndices = IdentityDictionary[
+    \instrument -> 0,
+    \group      -> 0,
+    \fx         -> 0
+];
+
+channels.do { |c|
+    var name = c[\name], synth = c[\synth], color = c[\color], type = c[\type], ctrlBus = c[\ctrlBus];
+    var slider, muteBtn, soloBtn, label, yOffset, xOffset;
+
+    // row-specific yOffset
+    yOffset = switch(type,
+        \instrument, { 50 },
+        \group,      { 300 },
+        \fx,         { 550 },
+        { 50 }
+    );
+
+    // row-specific xOffset
+    xOffset = rowIndices[type] * 100 + 50;
+
+    // increment row counter
+    rowIndices[type] = rowIndices[type] + 1;
+
+    // Slider
+    slider = Slider(win, Rect(xOffset, yOffset, 30, 150))
+    .background_(color)
+    .value_(ctrlBus.getSynchronous)   // start at current bus value
+    .action_({ |sl|
+        ctrlBus.set(sl.value);        // update the bus
+        updateStates.();
+    });
+
+    // Mute Button
+    muteBtn = Button(win, Rect(xOffset - 10, yOffset + 160, 25, 20))
+        .states_([["M", Color.black, Color(1,0.3,0.3)], ["M", Color.white, Color.red]])
+        .action_({ |btn|
+            c[\mute] = btn;
+            updateStates.();
+        });
+
+    // Solo Button
+    soloBtn = Button(win, Rect(xOffset + 20, yOffset + 160, 25, 20))
+        .states_([["S", Color.black, Color(0.7,0.7,1)], ["S", Color.white, Color.blue]])
+        .action_({ |btn|
+            c[\solo] = btn;
+            updateStates.();
+        });
+
+    // Label
+    label = StaticText(win, Rect(xOffset - 10, yOffset + 185, 70, 20))
+        .align_(\center)
+        .string_(name.asString);
+
+    // store GUI elements back into channel dict
+    c[\slider] = slider;
+    c[\mute]   = muteBtn;
+    c[\solo]   = soloBtn;
+};
+)
+
+
+(
+// --- Reset Mixer Utility ---
+~resetMixer = {
+    "Resetting mixer...".postln;
+
+    // 1. Free groups & synths
+    if(~mixerGroup.notNil) {
+        ~mixerGroup.freeAll;
+        ~mixerGroup.free;
+        ~mixerGroup = nil;
+    };
+
+    // 2. Free audio buses
+    [
+        \masterBus, \padBus, \darkPadBus, \bassBus, \droneBus, \harpBus,
+        \glassBus, \bellBus, \seaBus, \rainBus, \vinylBus,
+        \revBus, \compBus, \delBus, \satBus,
+        \fxGroup, \padGroupBus, \bassGroupBus, \droneGroupBus,
+        \bellGroupBus, \arpGroupBus, \texGroupBus
+    ].do { |sym|
+        var bus = currentEnvironment[sym];
+        if(bus.notNil) {
+            bus.free;
+            currentEnvironment[sym] = nil;
+        };
+    };
+
+    // 3. Free control buses
+    [
+        \masterCtrl, \padCtrl, \darkPadCtrl, \bassCtrl, \droneCtrl, \bellCtrl,
+        \harpCtrl, \glassCtrl, \seaCtrl, \rainCtrl, \vinylCtrl,
+        \revCtrl, \compCtrl, \delCtrl, \satCtrl,
+        \padGroupCtrl, \bassGroupCtrl, \droneGroupCtrl, \bellGroupCtrl,
+        \arpGroupCtrl, \texGroupCtrl, \fxGroupCtrl
+    ].do { |sym|
+        var bus = currentEnvironment[sym];
+        if(bus.notNil) {
+            bus.free;
+            currentEnvironment[sym] = nil;
+        };
+    };
+
+	// 4, Free all known synths
+	[
+		\padFader, \darkPadFader, \bassFader, \droneFader, \bellFader,
+		\harpFader, \glassFader, \seaFader, \rainFader, \vinylFader,
+		\padGroupFader, \bassGroupFader, \droneGroupFader, \bellGroupFader,
+		\arpGroupFader, \texGroupFader, \fxGroupFader,
+		\padGroupSend, \bassGroupSend, \droneGroupSend,
+		\bellGroupSend, \arpGroupSend, \texGroupSend,
+		\reverbFX, \compFX, \delayFX, \saturatorFX,
+		\masterFader
+	].do { |sym|
+		var node = currentEnvironment[sym];
+		if(node.notNil) {
+			node.free;
+			currentEnvironment[sym] = nil;
+		};
+	};
+
+	"Mixer fully reset.".postln;
+};
+)
 
 
 (
@@ -306,7 +524,7 @@ rhythmicity from fluid/free to rhythmic/structured -> pulse emphasis
 
 // --- Pad Synths ---
 (
-SynthDef(\padSynth, { |out = 0, freq = 440, amp = 0.2, gate = 1, pan = 0, atk = 2.0, rel = 4.0, ffreq = 100, rq = 0.2, modRate = 1, modDepth = 100, norm = 0.3, revMix = 0.3|
+SynthDef(\padSynth, { |out = 0, freq = 440, amp = 1, gate = 1, pan = 0, atk = 2.0, rel = 4.0, ffreq = 100, rq = 0.2, modRate = 1, modDepth = 100, norm = 0.3, revMix = 0.3|
     var osc, env, filt, mod, rev, snd;
 
     // Saw per voice
@@ -1515,7 +1733,7 @@ SynthDef(\rainTexture, { |out = 0, amp=0.2,
 )
 
 
-// --- Pdef with probabilistic chord selection ---
+// --- Pdef to play instruments simultaneously ---
 
 (
 ~seaPattern = Pbind(
@@ -1552,7 +1770,7 @@ SynthDef(\rainTexture, { |out = 0, amp=0.2,
     \waveDepth, Pfunc({ ~mapLin.(~parameters[\density], 0, 1, 0.1, 0.6) }),
     \waveRate,  Pfunc({ ~mapLin.(~parameters[\variability], 0, 1, 0.02, 0.08) }),
     \pan,       Pwhite(-1.0, 1.0),
-    \amp,       Pfunc({ ~getMapped.(\seaAmp) * 0.0001}),
+    \amp,       Pfunc({ ~getMapped.(\seaAmp) }),
 	\out,       ~seaBus
 );
 
@@ -1567,7 +1785,7 @@ SynthDef(\rainTexture, { |out = 0, amp=0.2,
     \hpFreq,      Pwhite(500, 1500),
 	\humLevel,    Pfunc({ ~getMapped.(\humLevel) }),
     \rumbleLevel, Pfunc({ ~getMapped.(\rumbleLevel) }),
-    \amp, Pfunc({ ~getMapped.(\seaAmp) } * 0.0001),
+    \amp, Pfunc({ ~getMapped.(\seaAmp) } ),
 	\out, ~vinylBus
 );
 
@@ -1577,8 +1795,8 @@ SynthDef(\rainTexture, { |out = 0, amp=0.2,
     \densFactor, Pfunc({ ~mapLin.(~parameters[\variability], 0, 1, 1, 2) }),
     \highpass, Pfunc({ ~mapLin.(~parameters[\brightness], 0, 1, 200, 2000) }),
     \lowpass,  Pfunc({ ~mapLin.(~parameters[\brightness], 0, 1, 3000, 8000) }),
-    \revMix,   Pfunc({ ~getMapped.(\revMix) * 0.7 }),
-    \amp,      Pfunc({ ~getMapped.(\rainAmp) * 1 }),
+    \revMix,   Pfunc({ ~getMapped.(\revMix) }),
+    \amp,      Pfunc({ ~getMapped.(\rainAmp) }),
 	\out, ~rainBus
 );
 
@@ -1661,7 +1879,7 @@ Pdef(\ambgen,
                     \atk,     ~getMapped.(\atk),
                     \rel,     ~getMapped.(\rel),
                     \rq,      ~getMapped.(\rq),
-					\amp,     ~getAmpForVoices.(chord.size) * 0.05,
+					\amp,     ~getAmpForVoices.(chord.size),
 					\out,     ~padBus
                 ]));
             };
@@ -1682,7 +1900,7 @@ Pdef(\ambgen,
                     \atk,         ~getMapped.(\atk),
                     \rel,         ~getMapped.(\rel),
                     \rq,          ~getMapped.(\rq),
-                    \amp,         ~getAmpForVoices.(chord.size) * 0.2,
+                    \amp,         ~getAmpForVoices.(chord.size),
 					\out,         ~darkPadBus
                 ]));
             };
@@ -1697,7 +1915,7 @@ Pdef(\ambgen,
                 \drive,  ~getMapped.(\drive),
                 \atk,    ~getMapped.(\atk),
                 \rel,    ~getMapped.(\rel),
-                \amp,    ~getMapped.(\bassAmp) * 0.1,
+                \amp,    ~getMapped.(\bassAmp),
 				\out,    ~bassBus
             ]));
 
@@ -1710,7 +1928,7 @@ Pdef(\ambgen,
 				\rq,          ~getMapped.(\rq),
 				\revMix,      ~getMapped.(\revMix) * 1.5,
 				\pan,         rrand(-0.5, 0.5),
-				\amp,         ~getMapped.(\droneAmp) * 0.6,
+				\amp,         ~getMapped.(\droneAmp),
 				\out,         ~droneBus
 			]));
 
@@ -1722,7 +1940,7 @@ Pdef(\ambgen,
 					\decay, Pwhite(2, 5, inf),
 					\pan, Pwhite(-0.6, 0.6, inf),
 					\revMix, ~getMapped.(\revMix),
-					\amp, ~getMapped.(\harpAmp) * 0.5,
+					\amp, ~getMapped.(\harpAmp),
 					\out, ~harpBus
 				)
 			);
@@ -1735,7 +1953,7 @@ Pdef(\ambgen,
 					\bright, ~getMapped.(\bright),
 					\pan, Pwhite(-0.6, 0.6, inf),
 					\revMix, ~getMapped.(\revMix) * 1.3,
-					\amp, ~getMapped.(\harpAmp) * 0.7,
+					\amp, ~getMapped.(\harpAmp),
 					\out, ~glassBus
 				)
 			);
@@ -1748,7 +1966,7 @@ Pdef(\ambgen,
 					\freq, bassFreq * 2,
 					\lpfFactor, ~getMapped.(\lpfFactor),
 					\revMix, ~getMapped.(\revMix),
-					\amp, ~getMapped.(\bellAmp) * 0.8,
+					\amp, ~getMapped.(\bellAmp),
 					\type, Pseq({
 						var decisions = Array.fill(4, { \rest }); // 4 rests
 						var step = (0..3);
@@ -1922,9 +2140,11 @@ Pbind(
     \bright, Pwhite(0.5, 1.0, inf), // sparkle amount
     \revMix, 0.7,
     \amp, 0.1,
-    \pan, Pwhite(-0.6, 0.6, inf)   // stereo movement
+    \pan, Pwhite(-0.6, 0.6, inf), // stereo movement
+	\out, ~glassBus
 ).play;
 )
+
 (
 Pbind(
     \instrument, \rainTexture,
@@ -1937,6 +2157,38 @@ Pbind(
     \amp,   0.4
 ).play;
 )
+
+x = Synth(\bassSynth, [\out, 0]); // send straight to hardware output
+x.free;
+(
+x = Synth(\bassSynth, [\out, ~bassBus], target: ~sourcesGroup);
+{ In.ar(~masterBus, 2) }.play;
+)
+
+(
+x = Synth(\padSynth, [\out, ~padBus], target: ~sourcesGroup);
+{ In.ar(~masterBus, 2) }.play;
+)
+
+(
+~testBus = Bus.audio(s, 2);
+~bassCtrl = Bus.control(s, 1).set(10);  // full gain
+
+~testFader = Synth(\fader, [\inBus, ~testBus, \outBus, 0, \ctrlBus, ~testCtrl]);
+
+// simple sine feeding into the bus
+~src = { Out.ar(~testBus, SinOsc.ar(220, 0, 0.2)) }.play;
+)
+
+~padCtrl.set(100);
+~padGroupCtrl.set(100);
+~masterCtrl.set(1.0); // make sure master is up too
+
+~padCtrl.get({ |v| ("padCtrl = " ++ v).postln; });
+~padGroupCtrl.get({ |v| ("padGroupCtrl = " ++ v).postln; });
+~masterCtrl.get({ |v| ("masterCtrl = " ++ v).postln; });
+
+
 
 // --- Usage & Checks ---
 
@@ -1977,5 +2229,12 @@ Pbind(
 
 // Show server information
 s.queryAllNodes;  // shows node tree
+s.queryAllBuffers;
 SynthDescLib.global.browse; // browse all available defs
+
+// Reset mixer when all buses are used up
+~resetMixer.();
+s.freeAll;   // frees all synths, groups, and releases buses
+s.newBusAllocators; // reset bus allocators
+
 
