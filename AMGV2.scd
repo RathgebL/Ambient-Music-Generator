@@ -542,56 +542,70 @@ rhythmicity from fluid/free to rhythmic/structured -> pulse emphasis
 
 // Mapped parameters
 ~parameterMappings = (
-	crushMix:     { ~mapLin.(~parameters[\warmth],      0, 1, 0.25, 0.05) },
-	darkPadSub:   { ~mapLin.(~parameters[\warmth],      0, 1, 0.2, 0.8) },
-	distAmt:      { ~mapLin.(~parameters[\warmth],      0, 1, 0.25, 0.05) },
-	droneDetune:  { ~mapLin.(~parameters[\warmth],      0, 1, 0.01, 0.05) },
-	detune:       { ~mapLin.(~parameters[\warmth],      0, 1, 0.0, 0.05) },
-	drive:        { ~mapLin.(~parameters[\warmth],      0, 1, 0.05, 0.5) },
-	humLevel:     { ~mapLin.(~parameters[\warmth],      0, 1, 0.0, 0.05) },
-	lpfFactor:    { ~mapLin.(~parameters[\warmth],      0, 1, 3, 12) },
-	modDepth:     { ~mapLin.(~parameters[\warmth],      0, 1, 1, 250) },
-	noisePink:    { ~mapLin.(~parameters[\warmth],      1, 0, 0.8, 0.2) },
-	noiseWhite:   { ~mapLin.(~parameters[\warmth],      0, 1, 0.2, 0.8) },
-	revDamp:      { ~mapLin.(~parameters[\warmth],      0, 1, 0.2, 0.8) },
-	rumbleLevel:  { ~mapLin.(~parameters[\warmth],      0, 1, 0.0, 0.2) },
-	sub:          { ~mapLin.(~parameters[\warmth],      0, 1, 0.5, 1.0) },
-	darkPadCutoff:{ ~mapExp.(~parameters[\brightness],  0, 1, 200, 2000) },
-	filterCutoff: { ~mapExp.(~parameters[\brightness],  0, 1, 2000, 8000) },
-	rq:           { ~mapLin.(~parameters[\brightness],  0, 1, 2, 0.5)},
-	bright:       { ~mapLin.(~parameters[\brightness],  0, 1, 0.7, 0.2)},
-	darkPadBits:  { ~mapLin.(~parameters[\variability], 0, 1, 4, 6).round.asInteger },
-	droneLfoRate: { ~mapLin.(~parameters[\variability], 0, 1, 0.01, 0.1) },
-	dur:          { ~mapLin.(~parameters[\variability], 0, 1, 16, 8).round.asInteger },
-	revMix:       { ~mapLin.(~parameters[\variability], 0, 1, 0.3, 0.5) },
-	atk:          { ~mapExp.(1 - ~parameters[\rhythmicity], 0, 1, 0.2, 2) },
-	legato:       { ~mapLin.(~parameters[\rhythmicity], 0, 1, 1, 0.95) },
-	pulseDiv:     { ~mapLin.(~parameters[\rhythmicity], 0, 1, 1, 4).round.asInteger },
-    rel:          { ~mapLin.(~parameters[\rhythmicity], 0, 1, 4, 1.0) },
-	bassAmp:      { ~mapExp.(~parameters[\density],     0, 1, 0.1, 0.2) },
-	bellAmp:      { ~mapExp.(~parameters[\density],     0, 1, 0.1, 0.5) },
-	droneAmp:     { ~mapExp.(~parameters[\density],     0, 1, 0.05, 0.2) },
-	harpAmp:      { ~mapExp.(~parameters[\density],     0, 1, 0.5, 1) },
-	noiseAmp:     { ~mapExp.(~parameters[\density],     0, 1, 0.5, 1) },
-	norm:         { ~mapExp.(~parameters[\density],     0, 1, 0.01, 0.05) },
-	seaAmp:       { ~mapExp.(~parameters[\density],     0, 1, 0.2, 0.3) },
-	rainAmp:      { ~mapExp.(~parameters[\density],     0, 1, 0.5, 1) },
-	numVoices:    {
-		var raw =   ~mapLin.(~parameters[\density],         0, 1, 1, 9).round.asInteger;
-		if(raw.even) { raw = raw + 1 }; // ensure odd
-		raw
-	},
-	modRate: {
-		var r = ~parameters[\rhythmicity];
-		var tempo = TempoClock.default.tempo; // beats per second
-		var divisions = [4, 2, 1.5, 1, 0.75, 0.5, 0.25]; // whole, half, dotted quarter, etc.
-		var idx = (r * (divisions.size - 1)).round.clip(0, divisions.size - 1);
-		var chosenDivision = divisions[idx];
 
-		// Convert beats to Hz (tempo-synced)
-		1 / chosenDivision * tempo
-	},
+    // raw parameters (for direct access or GUI control)
+    warmth:      { ~parameters[\warmth] },
+    brightness:  { ~parameters[\brightness] },
+    density:     { ~parameters[\density] },
+    variability: { ~parameters[\variability] },
+    rhythmicity: { ~parameters[\rhythmicity] },
+
+    // mapped parameters
+    crushMix:     { ~mapLin.(~parameters[\warmth],      0, 1, 0.25, 0.05) },
+    darkPadSub:   { ~mapLin.(~parameters[\warmth],      0, 1, 0.2, 0.8) },
+    distAmt:      { ~mapLin.(~parameters[\warmth],      0, 1, 0.25, 0.05) },
+    droneDetune:  { ~mapLin.(~parameters[\warmth],      0, 1, 0.01, 0.05) },
+    detune:       { ~mapLin.(~parameters[\warmth],      0, 1, 0.0, 0.05) },
+    drive:        { ~mapLin.(~parameters[\warmth],      0, 1, 0.05, 0.5) },
+    humLevel:     { ~mapLin.(~parameters[\warmth],      0, 1, 0.0, 0.05) },
+    lpfFactor:    { ~mapLin.(~parameters[\warmth],      0, 1, 3, 12) },
+    modDepth:     { ~mapLin.(~parameters[\warmth],      0, 1, 1, 250) },
+    noisePink:    { ~mapLin.(~parameters[\warmth],      1, 0, 0.8, 0.2) },
+    noiseWhite:   { ~mapLin.(~parameters[\warmth],      0, 1, 0.2, 0.8) },
+    revDamp:      { ~mapLin.(~parameters[\warmth],      0, 1, 0.2, 0.8) },
+    rumbleLevel:  { ~mapLin.(~parameters[\warmth],      0, 1, 0.0, 0.2) },
+    sub:          { ~mapLin.(~parameters[\warmth],      0, 1, 0.5, 1.0) },
+
+    darkPadCutoff:{ ~mapExp.(~parameters[\brightness],  0, 1, 200, 2000) },
+    filterCutoff: { ~mapExp.(~parameters[\brightness],  0, 1, 2000, 8000) },
+    rq:           { ~mapLin.(~parameters[\brightness],  0, 1, 2, 0.5)},
+    bright:       { ~mapLin.(~parameters[\brightness],  0, 1, 0.7, 0.2)},
+
+    darkPadBits:  { ~mapLin.(~parameters[\variability], 0, 1, 4, 6).round.asInteger },
+    droneLfoRate: { ~mapLin.(~parameters[\variability], 0, 1, 0.01, 0.1) },
+    dur:          { ~mapLin.(~parameters[\variability], 0, 1, 16, 8).round.asInteger },
+    revMix:       { ~mapLin.(~parameters[\variability], 0, 1, 0.3, 0.5) },
+
+    atk:          { ~mapExp.(1 - ~parameters[\rhythmicity], 0, 1, 0.2, 2) },
+    legato:       { ~mapLin.(~parameters[\rhythmicity], 0, 1, 1, 0.95) },
+    pulseDiv:     { ~mapLin.(~parameters[\rhythmicity], 0, 1, 1, 4).round.asInteger },
+    rel:          { ~mapLin.(~parameters[\rhythmicity], 0, 1, 4, 1.0) },
+
+    bassAmp:      { ~mapExp.(~parameters[\density],     0, 1, 0.1, 0.2) },
+    bellAmp:      { ~mapExp.(~parameters[\density],     0, 1, 0.1, 0.5) },
+    droneAmp:     { ~mapExp.(~parameters[\density],     0, 1, 0.05, 0.2) },
+    harpAmp:      { ~mapExp.(~parameters[\density],     0, 1, 0.5, 1) },
+    noiseAmp:     { ~mapExp.(~parameters[\density],     0, 1, 0.5, 1) },
+    norm:         { ~mapExp.(~parameters[\density],     0, 1, 0.01, 0.05) },
+    seaAmp:       { ~mapExp.(~parameters[\density],     0, 1, 0.2, 0.3) },
+    rainAmp:      { ~mapExp.(~parameters[\density],     0, 1, 0.5, 1) },
+
+    numVoices: {
+        var raw = ~mapLin.(~parameters[\density], 0, 1, 1, 9).round.asInteger;
+        if(raw.even) { raw = raw + 1 }; // ensure odd
+        raw
+    },
+
+    modRate: {
+        var r = ~parameters[\rhythmicity];
+        var tempo = TempoClock.default.tempo; // beats per second
+        var divisions = [4, 2, 1.5, 1, 0.75, 0.5, 0.25]; // whole, half, dotted quarter, etc.
+        var idx = (r * (divisions.size - 1)).round.clip(0, divisions.size - 1);
+        var chosenDivision = divisions[idx];
+        1 / chosenDivision * tempo // Convert beats to Hz (tempo-synced)
+    }
 );
+
 
 // Mapped parametersfor buses
 ~paramBuses = IdentityDictionary.new;
@@ -1896,7 +1910,7 @@ SynthDef(\rainTexture, { |out = 0, densFactor = 1, hp=400, lp=6000, amp=0.2|
 // --- Control Engine Helpers ---
 
 (
-// High-level “is this layer allowed to play?” flags (read by the conductor)
+// Toggle intruments
 ~layerOn = IdentityDictionary[
 	\Pad->true, \DarkPad->false, \Bass->false, \Drone->true,
 	\HarpArp->false, \GlassArp->false, \Bell->false,
@@ -2152,7 +2166,7 @@ Pdef(\ambgen,
             bassSynths.do { |s| s.set(\gate, 0) };     bassSynths.clear;
             droneSynths.do { |s| s.set(\gate, 0) };    droneSynths.clear;
 
-            // --- precompute pad params ---
+            // precompute pad params
             padFreqs = {
                 var freqs, detune, n, baseVoices, octaveVoices, octaveAmpFactor, voicePairs;
                 freqs  = chord.midicps;
@@ -2176,10 +2190,10 @@ Pdef(\ambgen,
                 (i / (padFreqs.size.max(1) - 1)).linlin(0, 1, -1, 1)
             });
 
-            // --- bass register ---
+            // bass register
             bassFreq = ~clampBassRange.(chord[0] - 24).midicps;
 
-            // --- PAD ---
+            // PAD
             if(~layerOn[\Pad]) {
                 padFreqs.do { |f, i|
                     padSynths.add(Synth(\padSynth, [
@@ -2198,7 +2212,7 @@ Pdef(\ambgen,
                 };
             };
 
-            // --- DARK PAD ---
+            // DARK PAD
             if(~layerOn[\DarkPad]) {
                 padFreqs.do { |f, i|
                     darkPadSynths.add(Synth(\darkPad, [
@@ -2221,7 +2235,7 @@ Pdef(\ambgen,
                 };
             };
 
-            // --- BASS ---
+            // BASS
             if(~layerOn[\Bass]) {
                 bassSynths.add(Synth(\bassSynth, [
                     \freq,  bassFreq,
@@ -2237,7 +2251,7 @@ Pdef(\ambgen,
                 ]));
             };
 
-            // --- DRONE ---
+            // DRONE
             if(~layerOn[\Drone]) {
                 droneSynths.add(Synth(\droneSynth, [
                     \freq,        ~getDroneNote.(~droneDegrees.choose, 2).midicps,
@@ -2252,7 +2266,7 @@ Pdef(\ambgen,
                 ]));
             };
 
-            // --- HARP ARP ---
+            // HARP ARP
             if(~layerOn[\HarpArp]) {
                 sp.par(
                     Pbind(
@@ -2268,7 +2282,7 @@ Pdef(\ambgen,
                 );
             };
 
-            // --- GLASS ARP ---
+            // GLASS ARP
             if(~layerOn[\GlassArp]) {
                 sp.par(
                     Pbind(
@@ -2284,7 +2298,7 @@ Pdef(\ambgen,
                 );
             };
 
-            // --- BELL ---
+            // BELL
             if(~layerOn[\Bell]) {
                 sp.par(
                     Pbind(
