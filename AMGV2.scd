@@ -135,10 +135,10 @@ SynthDef(\fxSaturator, { |inBus=0, outBus=0, ctrlBus, drive=1.1|
 SynthDef(\masterFader, { |inBus=0, outBus=0, ctrlBus|
     var sig = In.ar(inBus, 2) * In.kr(ctrlBus, 1);
 
-/*    // Global processing
+	// Global processing
     sig = Compander.ar(sig, sig, thresh: 0.4, slopeBelow: 1, slopeAbove: 0.3, clampTime: 0.01, relaxTime: 0.3);
     sig = FreeVerb2.ar(sig[0], sig[1], mix: 0.1, room: 0.7, damp: 0.5);
-	sig = Limiter.ar(sig, 0.9);*/
+	sig = Limiter.ar(sig, 0.9);
 
 	Poll.kr(Impulse.kr(1), Amplitude.kr(sig[0]), label: "Master tap L");
 	// Poll.kr(Impulse.kr(1), Amplitude.kr(sig[1]), label: "Master tap R");
@@ -567,12 +567,12 @@ rhythmicity from fluid/free to rhythmic/structured -> pulse emphasis
     crushMix:     { ~mapLin.(~parameters[\warmth],      0, 1, 0.25, 0.05) },
     darkPadSub:   { ~mapLin.(~parameters[\warmth],      0, 1, 0.2, 0.8) },
     distAmt:      { ~mapLin.(~parameters[\warmth],      0, 1, 0.25, 0.05) },
-    droneDetune:  { ~mapLin.(~parameters[\warmth],      0, 1, 0.01, 0.05) },
-    detune:       { ~mapLin.(~parameters[\warmth],      0, 1, 0.0, 0.05) },
+    droneDetune:  { ~mapExp.(~parameters[\warmth],      0, 1, 0.01, 0.05) },
+    detune:       { ~mapExp.(~parameters[\warmth],      0, 1, 0.01, 0.05) },
     drive:        { ~mapLin.(~parameters[\warmth],      0, 1, 0.05, 0.5) },
-    humLevel:     { ~mapLin.(~parameters[\warmth],      0, 1, 0.0, 0.05) },
+    humLevel:     { ~mapExp.(~parameters[\warmth],      0, 1, 0.01, 0.05) },
     lpfFactor:    { ~mapLin.(~parameters[\warmth],      0, 1, 3, 12) },
-    modDepth:     { ~mapLin.(~parameters[\warmth],      0, 1, 1, 250) },
+	// modDepth:     { ~mapLin.(~parameters[\warmth],      0, 1, 1, 1000) },
     noisePink:    { ~mapLin.(~parameters[\warmth],      1, 0, 0.8, 0.2) },
     noiseWhite:   { ~mapLin.(~parameters[\warmth],      0, 1, 0.2, 0.8) },
     revDamp:      { ~mapLin.(~parameters[\warmth],      0, 1, 0.2, 0.8) },
@@ -585,7 +585,7 @@ rhythmicity from fluid/free to rhythmic/structured -> pulse emphasis
     bright:       { ~mapLin.(~parameters[\brightness],  0, 1, 0.7, 0.2)},
 
     darkPadBits:  { ~mapLin.(~parameters[\variability], 0, 1, 4, 6).round.asInteger },
-    droneLfoRate: { ~mapLin.(~parameters[\variability], 0, 1, 0.01, 0.1) },
+    droneLfoRate: { ~mapLin.(~parameters[\variability], 0, 1, 0.01, 0.2) },
     dur:          { ~mapLin.(~parameters[\variability], 0, 1, 16, 8).round.asInteger },
     revMix:       { ~mapLin.(~parameters[\variability], 0, 1, 0.3, 0.5) },
 
@@ -594,13 +594,20 @@ rhythmicity from fluid/free to rhythmic/structured -> pulse emphasis
     pulseDiv:     { ~mapLin.(~parameters[\rhythmicity], 0, 1, 1, 4).round.asInteger },
     rel:          { ~mapLin.(~parameters[\rhythmicity], 0, 1, 4, 1.0) },
 
-    bassAmp:      { ~mapExp.(~parameters[\density],     0, 1, 0.1, 0.2) },
-    bellAmp:      { ~mapExp.(~parameters[\density],     0, 1, 0.1, 0.5) },
-    droneAmp:     { ~mapExp.(~parameters[\density],     0, 1, 0.05, 0.2) },
-    harpAmp:      { ~mapExp.(~parameters[\density],     0, 1, 0.5, 1) },
+    bassAmp:      { ~mapExp.(~parameters[\density],     0, 1, 0.05, 0.15) },
+    bellAmp:      { ~mapExp.(~parameters[\density],     0, 1, 0.1, 0.4) },
+    droneAmp:     { ~mapExp.(~parameters[\density],     0, 1, 0.05, 0.10) },
+    harpAmp:      { ~mapExp.(~parameters[\density],     0, 1, 0.3, 0.6) },
+	glassAmp:     { ~mapExp.(~parameters[\density],     0, 1, 0.01, 0.1) },
     noiseAmp:     { ~mapExp.(~parameters[\density],     0, 1, 0.5, 1) },
-    seaAmp:       { ~mapExp.(~parameters[\density],     0, 1, 0.2, 0.3) },
+    seaAmp:       { ~mapExp.(~parameters[\density],     0, 1, 0.2, 0.4) },
     rainAmp:      { ~mapExp.(~parameters[\density],     0, 1, 0.5, 1) },
+	vinylAmp:     { ~mapExp.(~parameters[\density],     0, 1, 0.1, 0.2) },
+
+	modDepth: {
+		var lfo = SinOsc.kr(0.1).range(1, 1000); // LFO modulating the max
+		~mapLin.(~parameters[\warmth], 0, 1, 0, lfo)
+	},
 
     numVoices: {
         var raw = ~mapLin.(~parameters[\density], 0, 1, 1, 9).round.asInteger;
@@ -688,7 +695,7 @@ rhythmicity from fluid/free to rhythmic/structured -> pulse emphasis
 
 (
 // Pad Synths
-SynthDef(\padSynth, { |out = 0, freq = 440, amp = 1, gate = 1, pan = 0|
+SynthDef(\padSynth, { |out = 0, freq = 440, amp = 0.2, gate = 1, pan = 0|
     var osc, env, filt, mod, rev, snd;
 
     // Live parameters from mapped buses
@@ -1305,9 +1312,9 @@ SynthDef(\rainTexture, { |out = 0, densFactor = 1, hp=400, lp=6000, amp=0.2|
 
 // Boundries for notes
 ~clampChordRangeStatic = { |notes|
-    var bright = ~mapLin.(~parameters[\warmth], 0, 1, 24, 0).round.asInteger;
+    var bright = ~mapLin.(~parameters[\warmth], 0, 1, 12, 0).round.asInteger;
 	var minNote = 48 + bright;
-	var maxNote = minNote + ~mapLin.(~parameters[\density], 0, 1, 36, 24).round.asInteger;
+	var maxNote = minNote + ~mapLin.(~parameters[\density], 0, 1, 24, 20).round.asInteger;
 
     var clamped = notes.collect { |n|
         var x = n;
@@ -1396,8 +1403,6 @@ SynthDef(\rainTexture, { |out = 0, densFactor = 1, hp=400, lp=6000, amp=0.2|
 	("[Chord DEBUG @ " ++ Main.elapsedTime.round(0.01) ++ "] Voices: "
     ++ chord.size ++ " | MIDI: " ++ chord ++ " | Hz: " ++ chord.midicps).postln;
 
-
-
     ~lastChord = chord;
     chord
 };
@@ -1414,8 +1419,9 @@ SynthDef(\rainTexture, { |out = 0, densFactor = 1, hp=400, lp=6000, amp=0.2|
 );
 
 // Function to get amp for current chord size
-~getAmpForVoices = { |numVoices|
-    (1 / numVoices.sqrt) * 0.5   // adjust 0.5 as your global pad level
+~getAmpForVoices = { |voices|
+	var amp = 0.2 / (voices * 9);
+    amp
 };
 
 // --- Markov second order harmony (degrees 1..7) ---
@@ -1867,8 +1873,7 @@ SynthDef(\rainTexture, { |out = 0, densFactor = 1, hp=400, lp=6000, amp=0.2|
 )
 
 
-// --- Arpeggiator helper ---
-
+// --- Control Engine Helpers ---
 (
 ~genDurations = { |totalDur=8|
 	var choices, weights, remaining, result;
@@ -1912,12 +1917,21 @@ SynthDef(\rainTexture, { |out = 0, densFactor = 1, hp=400, lp=6000, amp=0.2|
 
 	result
 };
-)
 
+/*// Modulate modDepth
+SynthDef(\modBusLFO, { |outBus=0, freq=0.5, depth=200, center=500|
+    var lfo = SinOsc.kr(freq, 0, depth, center);
 
-// --- Control Engine Helpers ---
+    Out.kr(outBus, lfo);
+}).add;
 
-(
+~modDepthLFO = Synth(\modBusLFO, [
+    \outBus, ~paramBuses[\modDepth],
+	\freq, ~getMapped.(\modRate),
+    \depth, ~mapExp.(~parameters[\variability], 0, 1, 0, 500),
+    \center, 500
+]);*/
+
 // Toggle intruments
 ~layerOn = IdentityDictionary[
 	\Pad->true, \DarkPad->false, \Bass->false, \Drone->true,
@@ -2126,7 +2140,7 @@ SynthDef(\kline, { |bus=0, start=0, end=1, dur=8, curve=0|
     \hpFreq,      Pwhite(500, 1500),
 	\humLevel,    Pfunc({ ~getMapped.(\humLevel) }),
     \rumbleLevel, Pfunc({ ~getMapped.(\rumbleLevel) }),
-    \amp,         Pfunc({ ~getMapped.(\seaAmp) } ),
+    \amp,         Pfunc({ ~getMapped.(\vinylAmp) } ),
 	\out,        ~vinylBus
 );
 
@@ -2141,6 +2155,7 @@ SynthDef(\kline, { |bus=0, start=0, end=1, dur=8, curve=0|
 	\out,         ~rainBus
 );
 )
+
 
 (
 Pdef(\ambgen,
@@ -2182,7 +2197,7 @@ Pdef(\ambgen,
                 }).flat;
 
                 octaveVoices = baseVoices * 2;
-                octaveAmpFactor = ~mapExp.(~parameters[\density], 0, 1, 0.1, 0.3);
+                octaveAmpFactor = ~mapExp.(~parameters[\density], 0, 1, 0.1, 0.2);
 
                 voicePairs = baseVoices.collect { |f| [f, 1.0] }
                            ++ octaveVoices.collect { |f| [f, octaveAmpFactor] };
@@ -2271,7 +2286,7 @@ Pdef(\ambgen,
                         \dur,   Pseq(durations, 1),
 						\freq, Pxrand(chord.midicps * 2, inf),
                         \pan,   Pwhite(-0.6, 0.6, inf),
-                        \amp,   ~getMapped.(\harpAmp),
+                        \amp,   ~getMapped.(\glassAmp),
                         \out,   ~glassBus
                     )
                 );
@@ -2399,64 +2414,6 @@ Routine({
 	}
 }).play;
 )
-
-
-
-
-
-x = Synth(\padSynth, [\freq, 220, \amp, 0.3, \out, 0]);
-x.fre
-
-~updateParamBuses.();
-(
-SynthDef(\padTest, { |out=0, freq=220|
-    var osc = Saw.ar(freq);
-    Out.ar(out, osc * 0.1 ! 2);
-}).add;
-)
-Synth(\padTest);
-
-
-// Monitor Buses
-(
-~busDebug = Routine({
-    inf.do {
-        ~paramBuses.keysDo { |k|
-            ~paramBuses[k].get { |val|
-                ("% = %".format(k, val)).postln;
-            };
-        };
-        1.0.wait; // print every second
-    }
-}).play(SystemClock);
-)
-
-// stop it:
-~busDebug.stop;
-
-(
-SynthDef(\debugBus, { |bus|
-    var val = In.kr(bus, 1);
-    Poll.kr(Impulse.kr(1), val, "Bus value");
-}).add;
-)
-
-// Run a debug synth on your modRate bus
-y = Synth(\debugBus, [\bus, ~paramBuses[\modRate]]);
-
-y.free;
-
-~updateParamBuses.isNil;   // should return false if it's defined
-// stop old updater (if one is running in a fork)
-thisProcess.stop;
-
-// restart the updater
-~updateParamBuses.();
-~paramUpdater.isPlaying;   // true if it’s running
-
-
-
-
 
 
 // --- Usage & Checks ---
