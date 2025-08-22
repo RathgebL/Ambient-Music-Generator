@@ -600,12 +600,12 @@ rhythmicity from fluid/free to rhythmic/structured -> pulse emphasis
     harpAmp:      { ~mapExp.(~parameters[\density],     0, 1, 0.3, 0.6) },
 	glassAmp:     { ~mapExp.(~parameters[\density],     0, 1, 0.01, 0.1) },
     noiseAmp:     { ~mapExp.(~parameters[\density],     0, 1, 0.5, 1) },
-    seaAmp:       { ~mapExp.(~parameters[\density],     0, 1, 0.2, 0.4) },
+    seaAmp:       { ~mapExp.(~parameters[\density],     0, 1, 0.1, 0.2) },
     rainAmp:      { ~mapExp.(~parameters[\density],     0, 1, 0.5, 1) },
 	vinylAmp:     { ~mapExp.(~parameters[\density],     0, 1, 0.1, 0.2) },
 
 	modDepth: {
-		var lfo = SinOsc.kr(0.1).range(1, 1000); // LFO modulating the max
+		var lfo = SinOsc.kr(0.5).range(1, 1000); // LFO modulating the max
 		~mapLin.(~parameters[\warmth], 0, 1, 0, lfo)
 	},
 
@@ -946,7 +946,6 @@ SynthDef(\glassArp, { |out = 0, freq = 440, amp = 0.2, noiseLength=0.3, gate = 1
 }).add;
 
 // Bell Synth
-// Bell Synth (bus-driven)
 SynthDef(\bell, { |out = 0, freq = 220, amp = 0.3, pan = 0, gate = 1, revRoom=1, revDamp=0.7|
     var snd, env, partials, freqs, amps, decays, body, rev;
 
@@ -983,6 +982,7 @@ SynthDef(\bell, { |out = 0, freq = 220, amp = 0.3, pan = 0, gate = 1, revRoom=1,
     // gentle saturation for fullness
     Out.ar(out, (rev * 3).tanh * env);
 }).add;
+
 
 // Textrure Synths
 
@@ -1100,7 +1100,7 @@ SynthDef(\rainTexture, { |out = 0, densFactor = 1, hp=400, lp=6000, amp=0.2|
 )
 
 
-// --- Harmony ---
+// --- Harmony Engine ---
 (
 ~scales = (
     // existing diatonic
@@ -1918,20 +1918,6 @@ SynthDef(\rainTexture, { |out = 0, densFactor = 1, hp=400, lp=6000, amp=0.2|
 	result
 };
 
-/*// Modulate modDepth
-SynthDef(\modBusLFO, { |outBus=0, freq=0.5, depth=200, center=500|
-    var lfo = SinOsc.kr(freq, 0, depth, center);
-
-    Out.kr(outBus, lfo);
-}).add;
-
-~modDepthLFO = Synth(\modBusLFO, [
-    \outBus, ~paramBuses[\modDepth],
-	\freq, ~getMapped.(\modRate),
-    \depth, ~mapExp.(~parameters[\variability], 0, 1, 0, 500),
-    \center, 500
-]);*/
-
 // Toggle intruments
 ~layerOn = IdentityDictionary[
 	\Pad->true, \DarkPad->false, \Bass->false, \Drone->true,
@@ -1939,7 +1925,7 @@ SynthDef(\modBusLFO, { |outBus=0, freq=0.5, depth=200, center=500|
 	\SeaTex->false, \RainTex->false, \VinylTex->true
 ];
 
-// Map your channel names → control buses (matches your GUI labels)
+// Map your channel names → control buses
 ~channelBus = IdentityDictionary[
 	\Pad        -> ~padCtrl,
 	\DarkPad    -> ~darkPadCtrl,
@@ -1952,7 +1938,7 @@ SynthDef(\modBusLFO, { |outBus=0, freq=0.5, depth=200, center=500|
 	\RainTex    -> ~rainCtrl,
 	\VinylTex   -> ~vinylCtrl,
 
-	// FX + group/master (handy to automate too)
+	// FX + group/master
 	\FXMaster   -> ~fxGroupCtrl,
 	\ReverbFX   -> ~revCtrl,
 	\DelayFX    -> ~delCtrl,
@@ -2048,14 +2034,14 @@ SynthDef(\kline, { |bus=0, start=0, end=1, dur=8, curve=0|
 	(
 		name: \intro, fadeTime: 16, paramTime: 40, dur: 6,
 		key: [\D, 3], scale: \yo,
-		layersOn: (SeaTex:true, VinylTex:true, RainTex:false, Drone:true, Pad:false, DarkPad:false, Bass:false, HarpArp:false, GlassArp:false, Bell:false),
+		layersOn: (SeaTex:true, VinylTex:false, RainTex:false, Drone:true, Pad:false, DarkPad:false, Bass:false, HarpArp:false, GlassArp:false, Bell:false),
 		targets: (SeaTex:0.35, VinylTex:0.25, Drone:0.12, Master:1.0, FXMaster:0.9, ReverbFX:0.8, DelayFX:0.15),
 		params: (warmth:0.35, brightness:0.35, density:0.18, variability:0.18, rhythmicity:0.2)
 	),
 
 	(
 		name: \firstPads, fadeTime: 20, paramTime: 60, dur: 8,
-		layersOn: (Pad:true, Drone:true, SeaTex:true, VinylTex:true, GlassArp:false, HarpArp:false, Bell:false, Bass:false, DarkPad:false, RainTex:false),
+		layersOn: (Pad:true, Drone:true, SeaTex:true, VinylTex:false, GlassArp:false, HarpArp:false, Bell:false, Bass:false, DarkPad:false, RainTex:false),
 		targets: (Pad:0.55, Drone:0.18, SeaTex:0.3, VinylTex:0.2, ReverbFX:0.85, DelayFX:0.25),
 		params: (warmth:0.5, brightness:0.45, density:0.25, variability:0.22, rhythmicity:0.25)
 	),
@@ -2070,14 +2056,14 @@ SynthDef(\kline, { |bus=0, start=0, end=1, dur=8, curve=0|
 
 	(
 		name: \ground, fadeTime: 22, paramTime: 70, dur: 10,
-		layersOn: (Bass:true, DarkPad:true),
+		layersOn: (RainTex:true, Bass:true, DarkPad:true),
 		targets: (Bass:0.12, DarkPad:0.28, Pad:0.4, Drone:0.15, DelayFX:0.3, SaturatorFX:0.15),
 		params: (warmth:0.7, brightness:0.5, density:0.38, rhythmicity:0.35)
 	),
 
 	(
 		name: \punctuate, fadeTime: 12, paramTime: 30, dur: 6,
-		layersOn: (Bell:true, HarpArp:true, GlassArp:false),
+		layersOn: (VinylTex:true, Bell:true, HarpArp:true, GlassArp:false),
 		targets: (Bell:0.14, HarpArp:0.1, DelayFX:0.35, ReverbFX:0.95),
 		params: (variability:0.28, density:0.3)
 	),
@@ -2085,7 +2071,7 @@ SynthDef(\kline, { |bus=0, start=0, end=1, dur=8, curve=0|
 	(
 		name: \exhale, fadeTime: 24, paramTime: 60, dur: 8,
 		scale: \inSen,
-		layersOn: (Bass:false, DarkPad:false, HarpArp:false, Bell:false, GlassArp:false),
+		layersOn: (VinylTex:true, Bass:false, DarkPad:false, HarpArp:false, Bell:false, GlassArp:false),
 		targets: (Pad:0.25, Drone:0.1, RainTex:0.08, SeaTex:0.25, VinylTex:0.2, DelayFX:0.15, ReverbFX:0.8),
 		params: (warmth:0.4, brightness:0.35, density:0.18, variability:0.15, rhythmicity:0.15)
 	)
@@ -2098,7 +2084,7 @@ SynthDef(\kline, { |bus=0, start=0, end=1, dur=8, curve=0|
 (
 ~seaPattern = Pbind(
     \instrument, \seaSynth,
-	\legato,      Pwhite(0.97,1.03),
+	\legato,      Pwhite(0.95,1.05),
 
     // time between waves, in beats
 	\dur,         Pfunc({ ~getMapped.(\dur)}),
