@@ -1,4 +1,4 @@
-//  --- Server Utilities
+//  --- Server Utilities ---
 
 (
 s.options.numAudioBusChannels = 512;
@@ -542,6 +542,7 @@ rhythmicity from fluid/free to rhythmic/structured -> pulse emphasis
     \rhythmicity-> Bus.control(s,1)
 ];
 
+
 // Linear mapping function
 ~mapLin = { |val, inMin=0, inMax=1, outMin=0, outMax=1|
 	((val - inMin) / (inMax - inMin)) * (outMax - outMin) + outMin;
@@ -595,12 +596,12 @@ rhythmicity from fluid/free to rhythmic/structured -> pulse emphasis
     rel:          { ~mapLin.(~parameters[\rhythmicity], 0, 1, 4, 1.0) },
 
     bassAmp:      { ~mapExp.(~parameters[\density],     0, 1, 0.05, 0.15) },
-    bellAmp:      { ~mapExp.(~parameters[\density],     0, 1, 0.1, 0.4) },
-    droneAmp:     { ~mapExp.(~parameters[\density],     0, 1, 0.05, 0.10) },
+    bellAmp:      { ~mapExp.(~parameters[\density],     0, 1, 0.1, 0.3) },
+    droneAmp:     { ~mapExp.(~parameters[\density],     0, 1, 0.05, 0.15) },
     harpAmp:      { ~mapExp.(~parameters[\density],     0, 1, 0.3, 0.6) },
 	glassAmp:     { ~mapExp.(~parameters[\density],     0, 1, 0.01, 0.1) },
     noiseAmp:     { ~mapExp.(~parameters[\density],     0, 1, 0.5, 1) },
-    seaAmp:       { ~mapExp.(~parameters[\density],     0, 1, 0.1, 0.2) },
+    seaAmp:       { ~mapExp.(~parameters[\density],     0, 1, 0.1, 0.3) },
     rainAmp:      { ~mapExp.(~parameters[\density],     0, 1, 0.5, 1) },
 	vinylAmp:     { ~mapExp.(~parameters[\density],     0, 1, 0.1, 0.2) },
 
@@ -626,46 +627,75 @@ rhythmicity from fluid/free to rhythmic/structured -> pulse emphasis
 );
 
 
-// Mapped parametersfor buses
+// Init buses once per mapping
 ~paramBuses = IdentityDictionary.new;
-~paramBuses.keysDo { |k|
-    ("Bus % → index % → value: %"
-        .format(k, ~paramBuses[k].index, ~paramBuses[k].getSynchronous)
-    ).postln;
-};
 ~parameterMappings.keysDo { |key|
-    ~paramBuses[key] = Bus.control(s,1);
+    if(~paramBuses[key].isNil) {
+        ~paramBuses[key] = Bus.control(s,1);
+    };
 };
 
-// Update buses function
-~updateParamBuses = {
-    {
-        inf.do {
-            ~parameterMappings.keysValuesDo { |key, func|
-				~paramBuses[key].set(func.());
+// Add FX buses as well
+~paramBuses[\reverb]    = ~revCtrl;
+~paramBuses[\delay]     = ~delCtrl;
+~paramBuses[\comp]      = ~compCtrl;
+~paramBuses[\saturator] = ~satCtrl;
+~paramBuses[\fxMaster]  = ~fxGroupCtrl;
+
+// Safe updater task
+~updateParamBusesTask = Task({
+    inf.do {
+        ~parameterMappings.keysValuesDo { |key, func|
+            if(~paramBuses[key].notNil) {
+                try {
+                    ~paramBuses[key].set(func.());
+                } {
+                    ("[updateParamBuses] Failed for % (maybe synth freed)"
+                        .format(key)).warn;
+                };
             };
-            0.1.wait;  // update every 100ms
-        }
-    }.fork(TempoClock.default);
+        };
+        0.1.wait;
+    }
+});
+
+// Start once
+~updateParamBuses = {
+    if(~updateParamBusesTask.isPlaying.not) {
+        ~updateParamBusesTask.play(TempoClock.default);
+    } {
+        "[updateParamBuses] already running".postln;
+    };
 };
 
 // Run update bus function
 ~paramUpdater = ~updateParamBuses.();
 
 
-// Quick set
+// Quick set (safe)
 ~setParam = { |key, val|
-	var mapped;
+    var mapped;
     ~ensureParams.();
     ~parameters[key] = val.clip(0,1);
 
-    // update mapped + bus
+    // compute mapped value
     mapped = ~getMapped.(key);
+
+    // only try to set if bus exists AND is valid
     if(mapped.notNil and: { ~paramBuses[key].notNil }) {
-        ~paramBuses[key].set(mapped);
+        try {
+            ~paramBuses[key].set(mapped);
+        } {
+            ("[ParamUpdate] FAILED for % → bus % (maybe synth freed)"
+                .format(key, ~paramBuses[key])).warn;
+        };
+    } {
+        ("[ParamUpdate] skipped % → % (no mapped or no bus)"
+            .format(key, val)).postln;
     };
 
-    ("[ParamUpdate] % = %, mapped → %".format(key, val, mapped)).postln;
+    ("[ParamUpdate] % = %, mapped → %"
+        .format(key, val, mapped ?? "nil")).postln;
 };
 
 // Sets multiple parameters
@@ -987,7 +1017,7 @@ SynthDef(\bell, { |out = 0, freq = 220, amp = 0.3, pan = 0, gate = 1, revRoom=1,
 // Textrure Synths
 
 // Sea Sound
-SynthDef(\seaSynth, { |out = 0, amp = 0.1, pan = 0, sus = 1, gate = 1|
+SynthDef(\seaSynth, { |out = 0, amp = 0.1, pan = 0, sus = 2, atk = 1, rel = 4, gate = 1|
     var src, mod, filt, env, rev, waveLFO;
 
     // Live parameters from mapped buses
@@ -1000,8 +1030,6 @@ SynthDef(\seaSynth, { |out = 0, amp = 0.1, pan = 0, sus = 1, gate = 1|
     var revMix    = In.kr(~paramBuses[\revMix]);         // reverb mix ← density
     var waveRate  = In.kr(~paramBuses[\droneLfoRate]);   // slow wave swell rate ← variability
     var waveDepth = In.kr(~paramBuses[\seaAmp]);         // swell depth ← density / scene
-    var atk       = In.kr(~paramBuses[\atk]);            // envelope attack ← rhythmicity
-    var rel       = In.kr(~paramBuses[\rel]);            // envelope release ← rhythmicity
 
     // Noise source (warm)
     src = PinkNoise.ar(pinkAmt) + WhiteNoise.ar(whiteAmt);
@@ -1016,7 +1044,7 @@ SynthDef(\seaSynth, { |out = 0, amp = 0.1, pan = 0, sus = 1, gate = 1|
     waveLFO = SinOsc.kr(waveRate, Rand(0, 2pi)).range(1 - waveDepth, 1);
 
     // ASR envelope
-    env = EnvGen.kr(Env.linen(atk, sus, rel, curve: -4), doneAction: 2);
+    env = EnvGen.kr(Env.linen(atk, sus, rel, curve: -3), doneAction: 2);
 
     // Reverb space
     rev = FreeVerb.ar(filt * env * amp * waveLFO, mix: revMix, room: 0.9, damp: 0.7);
@@ -1961,70 +1989,59 @@ SynthDef(\kline, { |bus=0, start=0, end=1, dur=8, curve=0|
 
 // Gradually change parameters
 ~rampParam = { |key, to, dur=60, curve=\lin|
-    var start = ~getParam.(key) ?? 0.5;  // safe fallback if nil
-    var env = Env([start, to], [dur], curve);
+    var start = ~getParam.(key) ?? 0.5;
+    var env   = Env([start, to], [dur], curve);
 
     ("[rampParam] Starting ramp for %: start=%, target=%, dur=%, curve=%"
         .format(key, start, to, dur, curve)).postln;
 
     Task({
-		var mapped;
-        // Make an Env signal with one value per second (dur samples)
         env.asSignal(dur).do { |val, i|
-            ~setParam.(key, val);
-
-            // compute mapped value if possible
-            mapped = ~getMapped.(key);
+            ~setParam.(key, val);  // safe bus update
             ("    step %/% → % = %, mapped → %"
-                .format(i, dur, key, val.round(0.001), mapped ?? "nil")).postln;
-
-            1.wait;   // 1 second resolution (you can reduce to e.g. 0.25.wait for finer updates)
+                .format(i, dur, key, val.round(0.001), ~getMapped.(key) ?? "nil")).postln;
+            1.wait;
         };
 
-        // force final target
+        // final target
         ~setParam.(key, to);
         ("[rampParam] Finished ramp for % at final value % (mapped → %)"
             .format(key, to, ~getMapped.(key))).postln;
-
     }).start;
 };
 
 // Apply a scene
 ~enterScene = { |scene|
-	("Entering scene: " ++ scene[\name]).postln;
+	var allParams;
+    ("Entering scene: " ++ scene[\name]).postln;
 
-	// Scale / key (optional per scene)
-	if(scene[\key].notNil)   { ~setKey.(scene[\key][0], scene[\key][1]) };
-	if(scene[\scale].notNil) { ~setScale.(scene[\scale]) };
+    if(scene[\key].notNil)   { ~setKey.(scene[\key][0], scene[\key][1]) };
+    if(scene[\scale].notNil) { ~setScale.(scene[\scale]) };
 
-	// Turn layers on/off for spawning logic
-	if(scene[\layersOn].notNil) {
-		scene[\layersOn].keysValuesDo { |k, v| ~layerOn[k] = v };
-	};
+    if(scene[\layersOn].notNil) {
+        scene[\layersOn].keysValuesDo { |k, v| ~layerOn[k] = v };
+    };
 
-	// Fade instrument/group/FX buses to targets
-	~targetsToFades.(scene[\targets] ? IdentityDictionary[], scene[\fadeTime] ? 12);
+    ~targetsToFades.(scene[\targets] ? IdentityDictionary[], scene[\fadeTime] ? 12);
 
-	// Optional FX return shaping
+    // unify fx + params into one dictionary and ramp them all
+	allParams = IdentityDictionary[];
+	if(scene[\params].notNil) { allParams.addAll(scene[\params]) };
 	if(scene[\fx].notNil) {
-		~targetsToFades.(IdentityDictionary[
-			\ReverbFX    -> (scene[\fx][\reverb]    ? ~revCtrl.getSynchronous),
-			\DelayFX     -> (scene[\fx][\delay]     ? ~delCtrl.getSynchronous),
-			\CompFX      -> (scene[\fx][\comp]      ? ~compCtrl.getSynchronous),
-			\SaturatorFX -> (scene[\fx][\saturator] ? ~satCtrl.getSynchronous),
-			\FXMaster    -> (scene[\fx][\fxMaster]  ? ~fxGroupCtrl.getSynchronous)
-		], scene[\fadeTime] ? 12);
-	};
-
-	// Global parameter morphs (smoothly)
-	if(scene[\params].notNil) {
-		scene[\params].keysValuesDo { |k, target|
-			~rampParam.(k, target, scene[\paramTime] ? (scene[\fadeTime] ? 12));
+		// rename FX keys to match your bus naming (optional)
+		scene[\fx].keysValuesDo { |k,v|
+			var mappedKey = case
+			{ k == \reverb    } { \reverb }
+			{ k == \delay     } { \delay }
+			{ k == \comp      } { \comp }
+			{ k == \saturator } { \saturator }
+			{ k == \fxMaster  } { \fxMaster }
+			{ k }; // fallback
+			allParams[mappedKey] = v;
 		};
 	};
 };
 )
-
 
 // --- Scenen (Presets) ---
 
@@ -2032,7 +2049,7 @@ SynthDef(\kline, { |bus=0, start=0, end=1, dur=8, curve=0|
 // A compact, tasteful starting timeline (≈ 20–25 min depending on your ~dur map)
 ~scenes = [
 	(
-		name: \intro, fadeTime: 16, paramTime: 40, dur: 6,
+		name: \intro, fadeTime: 16, paramTime: 40, dur: 4,
 		key: [\D, 3], scale: \yo,
 		layersOn: (SeaTex:true, VinylTex:false, RainTex:false, Drone:true, Pad:false, DarkPad:false, Bass:false, HarpArp:false, GlassArp:false, Bell:false),
 		targets: (SeaTex:0.35, VinylTex:0.25, Drone:0.12, Master:1.0, FXMaster:0.9, ReverbFX:0.8, DelayFX:0.15),
@@ -2047,7 +2064,7 @@ SynthDef(\kline, { |bus=0, start=0, end=1, dur=8, curve=0|
 	),
 
 	(
-		name: \shimmer, fadeTime: 18, paramTime: 60, dur: 7,
+		name: \shimmer, fadeTime: 18, paramTime: 60, dur: 6,
 		scale: \lydianDominant,
 		layersOn: (GlassArp:true, HarpArp:true, RainTex:true),
 		targets: (GlassArp:0.18, HarpArp:0.12, RainTex:0.22, DelayFX:0.45, ReverbFX:0.9),
@@ -2055,7 +2072,7 @@ SynthDef(\kline, { |bus=0, start=0, end=1, dur=8, curve=0|
 	),
 
 	(
-		name: \ground, fadeTime: 22, paramTime: 70, dur: 10,
+		name: \ground, fadeTime: 22, paramTime: 70, dur: 12,
 		layersOn: (RainTex:true, Bass:true, DarkPad:true),
 		targets: (Bass:0.12, DarkPad:0.28, Pad:0.4, Drone:0.15, DelayFX:0.3, SaturatorFX:0.15),
 		params: (warmth:0.7, brightness:0.5, density:0.38, rhythmicity:0.35)
@@ -2084,30 +2101,34 @@ SynthDef(\kline, { |bus=0, start=0, end=1, dur=8, curve=0|
 (
 ~seaPattern = Pbind(
     \instrument, \seaSynth,
-	\legato,      Pwhite(0.95,1.05),
+    \legato,      Pwhite(0.95, 1.05),
 
     // time between waves, in beats
-	\dur,         Pfunc({ ~getMapped.(\dur)}),
+    \dur,         Pfunc { ~getMapped.(\dur) },
 
-    // envelope shaping
-    \atk,         Pwhite(0.1, 0.4),   // proportion of dur
-    \sus,         Pwhite(0.05, 0.2),   // proportion of dur
-    \rel,         Pfunc { |ev|
-        var beatDur = thisThread.clock.beatDur;
-        var totalBeats = ev[\dur];
-        var atkBeats   = (ev[\atk] * totalBeats);
-        var susBeats   = (ev[\sus] * totalBeats);
-        var relBeats   = (totalBeats - atkBeats - susBeats).max(0.1);
-        relBeats * beatDur  // convert to seconds
+    // envelope shaping (fractions of dur)
+    \atkFrac,     Pwhite(0.1, 0.4),   // fraction of dur
+    \susFrac,     Pwhite(0.05, 0.2),  // fraction of dur
+
+    // convert fractions to actual seconds
+    \atk, Pfunc { |ev|
+        ev[\atkFrac] * ev[\dur] * thisThread.clock.beatDur
     },
+	\sus, Pfunc { |ev|
+		ev[\susFrac] * ev[\dur] * thisThread.clock.beatDur
+	},
+	\rel, Pfunc { |ev|
+		var beatDur   = thisThread.clock.beatDur;
+		var totalBeats = ev[\dur];
+		var atkBeats   = ev[\atkFrac] * totalBeats;
+		var susBeats   = ev[\susFrac] * totalBeats;
+		var relBeats   = (totalBeats - atkBeats - susBeats).max(0.1);
+		relBeats * beatDur
+	},
 
-    // convert atk/sus also to seconds
-    \atk,         Pfunc { |ev| ev[\atk] * ev[\dur] * thisThread.clock.beatDur },
-    \sus,         Pfunc { |ev| ev[\sus] * ev[\dur] * thisThread.clock.beatDur },
-
-    // synthesis params
-    \ffreq,       1500,
-    \rq,          0.7,
+	// synthesis params
+	\ffreq,       1500,
+	\rq,          0.7,
     \waveDepth,   Pfunc({ ~mapLin.(~parameters[\density], 0, 1, 0.1, 0.6) }),
     \waveRate,    Pfunc({ ~mapLin.(~parameters[\variability], 0, 1, 0.02, 0.08) }),
     \pan,         Pwhite(-1.0, 1.0),
@@ -2241,6 +2262,7 @@ Pdef(\ambgen,
             if(~layerOn[\Drone]) {
                 droneSynths.add(Synth(\droneSynth, [
                     \dur,    ~getMapped.(\dur),
+					\legato, ~getMapped.(\legato) * 0.97,
 					\freq,   ~getDroneNote.(~droneDegrees.choose, 2).midicps,
                     \pan,    rrand(-0.5, 0.5),
                     \amp,    ~getMapped.(\droneAmp),
@@ -2317,8 +2339,10 @@ Pdef(\ambgen,
         }
     }
 ).play;
+)
 
 
+(
 // Conductor routine: step through scenes; scene.dur is in chord cycles
 ~conductor = Routine({
 	~scenes.do { |sc|
@@ -2333,10 +2357,11 @@ Pdef(\ambgen,
 
 
 
-// --- Routine to change scales ---
+// --- Routines ---
 
+// Routine to change scales
 (
-Routine({
+~scaleChanger = Routine({
 	var allScales = [
 		// --- Heptatonic (7-note) ---
 		"ionian", "dorian", "phrygian", "lydian",
@@ -2401,6 +2426,57 @@ Routine({
 }).play;
 )
 
+(
+// Routine for instrument set selection
+~instrumentChanger = Routine({
+    var textures   = [\SeaTex, \RainTex, \VinylTex];
+    var pads       = [\Pad, \DarkPad];
+    var arps       = [\HarpArp, \GlassArp];
+    var others     = [\Drone, \Bass, \Bell]; // can be combined freely
+
+    var active, tex, pad, arp, nInstruments, cycleWait, extras;
+
+    loop {
+        // 1. Always one texture
+        tex = textures.choose;
+
+        // 2. Optional pad (0 or 1)
+        pad = (1.rand == 0).if { pads.choose } { nil };
+
+        // 3. Optional arp (0 or 1)
+        arp = (1.rand == 0).if { arps.choose } { nil };
+
+        // 4. Decide total instrument count (between 2 and 6)
+        nInstruments = rrand(2, 6);
+
+        // 5. Build active set
+        active = [tex];
+        if(pad.notNil) { active = active.add(pad) };
+        if(arp.notNil) { active = active.add(arp) };
+
+        // pick from others until we reach size
+        extras = others.scramble.copyRange(
+            0,
+            (nInstruments - active.size - 1).clip(0, others.size - 1)
+        );
+        active = active ++ extras;
+
+        // Clear ~layerOn first
+        ~layerOn.keysDo { |k| ~layerOn[k] = false };
+
+        // Activate chosen set
+        active.do { |inst| ~layerOn[inst] = true };
+
+        ("[InstrumentChanger] Active: " ++ active).postln;
+
+        // 6. Wait time in chord cycles (scaled by variability)
+        cycleWait = rrand(4, 12); // between 4 and 12 chords
+        (cycleWait * ~getMapped.(\dur)).wait;
+    }
+}).play;
+)
+
+
 
 // --- Usage & Checks ---
 
@@ -2448,7 +2524,3 @@ SynthDescLib.global.browse; // browse all available defs
 
 // Reset mixer when all buses are used up
 ~resetMixer.();
-s.options.device_("YourAudioDeviceName"); // choose correct device
-s.reboot;
-
-
