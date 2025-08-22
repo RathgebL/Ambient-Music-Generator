@@ -2342,140 +2342,192 @@ Pdef(\ambgen,
 )
 
 
+// --- Routine Helpers ---
+
 (
-// Conductor routine: step through scenes; scene.dur is in chord cycles
-~conductor = Routine({
-	~scenes.do { |sc|
-		~enterScene.(sc);
-		(sc[\dur] * ((~getMapped !? { ~getMapped.(\dur) }) ? 8)).wait;
-	};
-}).play(TempoClock.default);
+// A global dictionary to track running routines
+~routines = IdentityDictionary.new;
+
+// Safe routine starter
+~startRoutine = { |name, routineFunc|
+    var existing = ~routines[name];
+    if(existing.notNil and: { existing.isPlaying }) {
+        ("[RoutineGuard] " ++ name ++ " already running. Skipping.").postln;
+        existing  // return the existing one
+    } {
+        var r = routineFunc.();
+        r.play(TempoClock.default);
+        ~routines[name] = r; // store in dictionary
+        ("[RoutineGuard] Started " ++ name).postln;
+        r  // return the new routine
+    };
+};
+
+// Safe stopper
+~stopRoutine = { |name|
+    var r = ~routines[name];
+    if(r.notNil and: { r.isPlaying }) {
+        r.stop;
+        ("[RoutineGuard] Stopped " ++ name).postln;
+        ~routines.removeAt(name); // cleanup
+    } {
+        ("[RoutineGuard] Not running: " ++ name).postln;
+    };
+};
 )
-
-// Handy stop
-~stopConductor = { ~conductor.tryPerform(\stop) };
-
 
 
 // --- Routines ---
 
+// Conductor to play a piece of ambient music (Scenes)
+(
+~startRoutine.(\conductor, {
+    Routine({
+        ~scenes.do { |sc|
+            ~enterScene.(sc);
+            (sc[\dur] * (~getMapped.(\dur) ? 8)).wait;
+        };
+    })
+});
+)
+
+~stopRoutine.(\conductor);
+
 // Routine to change scales
 (
-~scaleChanger = Routine({
-	var allScales = [
-		// --- Heptatonic (7-note) ---
-		"ionian", "dorian", "phrygian", "lydian",
-		"mixolydian", "aeolian", "locrian",
+~startRoutine.(\scaleChanger, {
+	Routine({
+		var allScales = [
+			// --- Heptatonic (7-note) ---
+			"ionian", "dorian", "phrygian", "lydian",
+			"mixolydian", "aeolian", "locrian",
 
-		// --- Pentatonic (5-note) ---
-		"majorPent", "minorPent", "egyptian",
+			// --- Pentatonic (5-note) ---
+			"majorPent", "minorPent", "egyptian",
 
-		// --- Hexatonic (6-note) ---
-		"wholeTone", "augmented", "tritone",
+			// --- Hexatonic (6-note) ---
+			"wholeTone", "augmented", "tritone",
 
-		// --- Octatonic (8-note) ---
-		"dimWH", "dimHW",
+			// --- Octatonic (8-note) ---
+			"dimWH", "dimHW",
 
-		// --- Modal hybrids (7-note) ---
-		"lydianDominant", "phrygianDominant",
+			// --- Modal hybrids (7-note) ---
+			"lydianDominant", "phrygianDominant",
 
-		// --- Ethereal / world-inspired (5-note mostly) ---
-		"hirajoshi", "inSen", "yo", "iwato",
+			// --- Ethereal / world-inspired (5-note mostly) ---
+			"hirajoshi", "inSen", "yo", "iwato",
 
-		// --- Exotic / other (7-note) ---
-		"persian", "neapolitan", "enigmatic"
-	];
+			// --- Exotic / other (7-note) ---
+			"persian", "neapolitan", "enigmatic"
+		];
 
-	// weights must match array size
-	var weights = [
-		// Heptatonic
-		0.08, 0.08, 0.05, 0.08, 0.05, 0.08, 0.04,
+		// weights must match array size
+		var weights = [
+			// Heptatonic
+			0.08, 0.08, 0.05, 0.08, 0.05, 0.08, 0.04,
 
-		// Pentatonic (very common in ambient)
-		0.08, 0.08, 0.05,
+			// Pentatonic (very common in ambient)
+			0.08, 0.08, 0.05,
 
-		// Hexatonic (moderately rare)
-		0.04, 0.03, 0.03,
+			// Hexatonic (moderately rare)
+			0.04, 0.03, 0.03,
 
-		// Octatonic (special flavor)
-		0.03, 0.03,
+			// Octatonic (special flavor)
+			0.03, 0.03,
 
-		// Modal hybrids
-		0.04, 0.04,
+			// Modal hybrids
+			0.04, 0.04,
 
-		// Ethereal
-		0.06, 0.05, 0.05, 0.05,
+			// Ethereal
+			0.06, 0.05, 0.05, 0.05,
 
-		// Exotic
-		0.04, 0.03, 0.03
-	];
+			// Exotic
+			0.04, 0.03, 0.03
+		];
 
-	var waitTime, factors, idx;
+		var waitTime, factors, idx;
 
-	loop {
-		~setScale.(allScales.wchoose(weights).asSymbol);
+		loop {
+			~setScale.(allScales.wchoose(weights).asSymbol);
 
-		// wait time in chord cycles
-		factors = [32, 24, 16, 12, 8, 6];
-		idx = (~parameters[\variability] * 6).floor.clip(0, 5);
-		waitTime = factors[idx] * ~getMapped.(\dur);
+			// wait time in chord cycles
+			factors = [32, 24, 16, 12, 8, 6];
+			idx = (~parameters[\variability] * 6).floor.clip(0, 5);
+			waitTime = factors[idx] * ~getMapped.(\dur);
 
-		("Next wait time: " ++ waitTime).postln; // debug
-		waitTime.wait;
-	}
-}).play;
+			("Next wait time: " ++ waitTime).postln; // debug
+			waitTime.wait;
+		}
+	});
+})
 )
 
+
+// Routine for instrument set selection with smooth fades
 (
-// Routine for instrument set selection
-~instrumentChanger = Routine({
-    var textures   = [\SeaTex, \RainTex, \VinylTex];
-    var pads       = [\Pad, \DarkPad];
-    var arps       = [\HarpArp, \GlassArp];
-    var others     = [\Drone, \Bass, \Bell]; // can be combined freely
+~startRoutine.(\instrumentChanger, {
+	Routine({
+		var textures   = [\SeaTex, \RainTex, \VinylTex];
+		var pads       = [\Pad, \DarkPad];
+		var arps       = [\HarpArp, \GlassArp];
+		var others     = [\Drone, \Bass, \Bell]; // can be combined freely
 
-    var active, tex, pad, arp, nInstruments, cycleWait, extras;
+		var active, tex, pad, arp, nInstruments, cycleWait, extras, fades;
+		var fadeTime = 12; // seconds to fade in/out
 
-    loop {
-        // 1. Always one texture
-        tex = textures.choose;
+		loop {
+			// 1. Always one texture
+			tex = textures.choose;
 
-        // 2. Optional pad (0 or 1)
-        pad = (1.rand == 0).if { pads.choose } { nil };
+			// 2. Optional pad (0 or 1)
+			pad = (1.rand == 0).if { pads.choose } { nil };
 
-        // 3. Optional arp (0 or 1)
-        arp = (1.rand == 0).if { arps.choose } { nil };
+			// 3. Optional arp (0 or 1)
+			arp = (1.rand == 0).if { arps.choose } { nil };
 
-        // 4. Decide total instrument count (between 2 and 6)
-        nInstruments = rrand(2, 6);
+			// 4. Decide total instrument count (between 2 and 6)
+			nInstruments = rrand(2, 6);
 
-        // 5. Build active set
-        active = [tex];
-        if(pad.notNil) { active = active.add(pad) };
-        if(arp.notNil) { active = active.add(arp) };
+			// 5. Build active set
+			active = [tex];
+			if(pad.notNil) { active = active.add(pad) };
+			if(arp.notNil) { active = active.add(arp) };
 
-        // pick from others until we reach size
-        extras = others.scramble.copyRange(
-            0,
-            (nInstruments - active.size - 1).clip(0, others.size - 1)
-        );
-        active = active ++ extras;
+			// pick from others until we reach size
+			extras = others.scramble.copyRange(
+				0,
+				(nInstruments - active.size - 1).clip(0, others.size - 1)
+			);
+			active = active ++ extras;
 
-        // Clear ~layerOn first
-        ~layerOn.keysDo { |k| ~layerOn[k] = false };
+			// --- FADE LOGIC ---
+			fades = IdentityDictionary[];
 
-        // Activate chosen set
-        active.do { |inst| ~layerOn[inst] = true };
+			// fade in chosen instruments
+			active.do { |inst| fades[inst] = rrand(0.08, 0.3) }; // random soft target level
 
-        ("[InstrumentChanger] Active: " ++ active).postln;
+			// fade out all others
+			(~layerOn.keys.asArray ++ textures ++ pads ++ arps ++ others).as(Set).do { |inst|
+				if(active.includes(inst).not) {
+					fades[inst] = 0.0; // fade out
+				};
+			};
 
-        // 6. Wait time in chord cycles (scaled by variability)
-        cycleWait = rrand(4, 12); // between 4 and 12 chords
-        (cycleWait * ~getMapped.(\dur)).wait;
-    }
-}).play;
+			// apply fades smoothly
+			~targetsToFades.(fades, fadeTime);
+
+			// update bookkeeping
+			~layerOn.keysDo { |k| ~layerOn[k] = active.includes(k) };
+
+			("[InstrumentChanger] Active (fading): " ++ active).postln;
+
+			// 6. Wait time in chord cycles (scaled by variability)
+			cycleWait = rrand(4, 12); // between 4 and 12 chords
+			(cycleWait * ~getMapped.(\dur)).wait;
+		}
+	});
+})
 )
-
 
 
 // --- Usage & Checks ---
@@ -2503,7 +2555,7 @@ Pdef(\ambgen,
 ~setParam.(\brightness, 0.7);
 
 // Density: 0 (few voices/open) → 1 (many voices/clustered)
-~setParam.(\density, 0.2);
+~setParam.(\density, 0.5);
 
 // Variability: 0 (slow/static) → 1 (fast/changing)
 ~setParam.(\variability, 0.3);
