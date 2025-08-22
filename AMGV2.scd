@@ -1,12 +1,13 @@
+//  --- Server Utilities
+
+(
 s.options.numAudioBusChannels = 512;
 s.reboot;
 s.scope;
 s.meter;
 s.plotTree;
 
-
-(
-// --- Reset Mixer Utility ---
+// Reset mixer
 ~resetMixer = {
 	s.freeAll;   // frees all synths, groups, and releases buses
 	s.newBusAllocators; // reset bus allocators
@@ -27,7 +28,8 @@ s.plotTree;
 ~dryGroup          = Group.after(~groupFadersGroup); // sends to master
 ~sendsGroup        = Group.after(~dryGroup);         // sends to FX
 ~fxsGroup          = Group.after(~sendsGroup);       // FX processors
-~masterGroup       = Group.after(~fxsGroup);         // final master fader
+~fxMaster          = Group.after(~fxsGroup);         // FX master
+~master            = Group.after(~fxMaster);        // final master fader
 
 
 // Fader with control bus
@@ -35,7 +37,7 @@ SynthDef(\fader, { |inBus, outBus, ctrlBus|
     var sig = In.ar(inBus, 2) * In.kr(ctrlBus, 1);
 
     // print RMS amplitude of each channel every 0.1 sec
-	// Poll.kr(Impulse.kr(10), Amplitude.kr(sig[0]), label: "fader L");
+	Poll.kr(Impulse.kr(0.2), Amplitude.kr(sig[0]), label: "fader L");
 	// Poll.kr(Impulse.kr(10), Amplitude.kr(sig[1]), label: "fader R");
 
     Out.ar(outBus, sig);
@@ -46,8 +48,19 @@ SynthDef(\groupFader, { |inBus, outBus, ctrlBus|
     var sig = In.ar(inBus, 2) * In.kr(ctrlBus, 1);
 
     // print RMS amplitude of each channel every 0.1 sec
-	// Poll.kr(Impulse.kr(10), Amplitude.kr(sig[0]), label: "group fader L");
+	Poll.kr(Impulse.kr(0.2), Amplitude.kr(sig[0]), label: "group fader L");
 	// Poll.kr(Impulse.kr(10), Amplitude.kr(sig[1]), label: "group fader R");
+
+    Out.ar(outBus, sig);
+}).add;
+
+// Fader with control bus
+SynthDef(\fxGroupFader, { |inBus, outBus, ctrlBus|
+    var sig = In.ar(inBus, 2) * In.kr(ctrlBus, 1);
+
+    // print RMS amplitude of each channel every 0.1 sec
+	Poll.kr(Impulse.kr(0.2), Amplitude.kr(sig[0]), label: "FX group fader L");
+	// Poll.kr(Impulse.kr(10), Amplitude.kr(sig[1]), label: "FX group fader R");
 
     Out.ar(outBus, sig);
 }).add;
@@ -56,7 +69,7 @@ SynthDef(\drySend, { |inBus, outBus, ctrlBus|
     var sig = In.ar(inBus, 2) * In.kr(ctrlBus, 1);
 
     // print RMS amplitude of each channel every 0.1 sec
-	// Poll.kr(Impulse.kr(10), Amplitude.kr(sig[0]), label: "dry send L");
+	Poll.kr(Impulse.kr(0.2), Amplitude.kr(sig[0]), label: "dry send L");
 	// Poll.kr(Impulse.kr(10), Amplitude.kr(sig[1]), label: "dry send R");
 
     Out.ar(outBus, sig);
@@ -66,8 +79,8 @@ SynthDef(\drySend, { |inBus, outBus, ctrlBus|
 SynthDef(\multiSend, { |inBus, revBus, compBus, delBus, satBus, amp=1|
     var sig = In.ar(inBus, 2) * amp;
 
-	// Poll.kr(Impulse.kr(10), Amplitude.kr(sig[0]), label: "send tap L");
-	// Poll.kr(Impulse.kr(10), Amplitude.kr(sig[1]), label: "send tap R");
+	Poll.kr(Impulse.kr(0.2), Amplitude.kr(sig[0]), label: "multi send tap L");
+	// Poll.kr(Impulse.kr(10), Amplitude.kr(sig[1]), label: "multi send tap R");
 
     Out.ar(revBus, sig);
     Out.ar(compBus, sig);
@@ -81,7 +94,7 @@ SynthDef(\fxReverb, { |inBus=0, outBus=0, ctrlBus, room=0.9, damp=0.5, mix=1.0|
 	in = In.ar(inBus, 2) * In.kr(ctrlBus, 1);
     sig = FreeVerb2.ar(in[0], in[1], mix, room, damp); // always wet
 
-	// Poll.kr(Impulse.kr(10), Amplitude.kr(sig[0]), label: "rev tap L");
+	Poll.kr(Impulse.kr(0.2), Amplitude.kr(sig[0]), label: "rev tap L");
 	// Poll.kr(Impulse.kr(10), Amplitude.kr(sig[1]), label: "rev tap R");
 
 	Out.ar(outBus, sig);
@@ -122,13 +135,13 @@ SynthDef(\fxSaturator, { |inBus=0, outBus=0, ctrlBus, drive=1.1|
 SynthDef(\masterFader, { |inBus=0, outBus=0, ctrlBus|
     var sig = In.ar(inBus, 2) * In.kr(ctrlBus, 1);
 
-    // Global processing
+/*    // Global processing
     sig = Compander.ar(sig, sig, thresh: 0.4, slopeBelow: 1, slopeAbove: 0.3, clampTime: 0.01, relaxTime: 0.3);
     sig = FreeVerb2.ar(sig[0], sig[1], mix: 0.1, room: 0.7, damp: 0.5);
-	sig = Limiter.ar(sig, 0.9);
+	sig = Limiter.ar(sig, 0.9);*/
 
-	// Poll.kr(Impulse.kr(10), Amplitude.kr(sig[0]), label: "Master tap L");
-	// Poll.kr(Impulse.kr(10), Amplitude.kr(sig[1]), label: "Master tap R");
+	Poll.kr(Impulse.kr(1), Amplitude.kr(sig[0]), label: "Master tap L");
+	// Poll.kr(Impulse.kr(1), Amplitude.kr(sig[1]), label: "Master tap R");
 
 	Out.ar(outBus, sig);
 }).add;
@@ -204,6 +217,14 @@ SynthDef(\masterFader, { |inBus=0, outBus=0, ctrlBus|
 ~fxGroupCtrl     = Bus.control(s, 1).set(1);
 ~padDryCtrl      = Bus.control(s, 1).set(1);
 
+// Dry control busses
+~padDryCtrl      = Bus.control(s, 1).set(1);
+~bassDryCtrl     = Bus.control(s, 1).set(1);
+~droneDryCtrl    = Bus.control(s, 1).set(1);
+~bellDryCtrl     = Bus.control(s, 1).set(1);
+~arpDryCtrl      = Bus.control(s, 1).set(1);
+~texDryCtrl      = Bus.control(s, 1).set(1);
+
 // Instrument faders
 ~padFader        = Synth(\fader,       [\inBus, ~padBus,        \outBus, ~padGroupBus,   \ctrlBus, ~padCtrl],        target: ~fadersGroup);
 ~darkPadFader    = Synth(\fader,       [\inBus, ~darkPadBus,    \outBus, ~padGroupBus,   \ctrlBus, ~darkPadCtrl],    target: ~fadersGroup);
@@ -223,9 +244,6 @@ SynthDef(\masterFader, { |inBus=0, outBus=0, ctrlBus|
 ~bellGroupFader  = Synth(\groupFader,  [\inBus, ~bellGroupBus,  \outBus, ~bellDryBus,    \ctrlBus, ~bellGroupCtrl],  target: ~groupFadersGroup);
 ~arpGroupFader   = Synth(\groupFader,  [\inBus, ~arpGroupBus,   \outBus, ~arpDryBus,     \ctrlBus, ~arpGroupCtrl],   target: ~groupFadersGroup);
 ~texGroupFader   = Synth(\groupFader,  [\inBus, ~texGroupBus,   \outBus, ~texDryBus,     \ctrlBus, ~texGroupCtrl],   target: ~groupFadersGroup);
-
-// FX group fader
-~fxGroupFader    = Synth(\groupFader,  [\inBus, ~fxGroup,       \outBus, ~masterBus,     \ctrlBus, ~fxGroupCtrl],    target: ~groupFadersGroup);
 
 // Dry sends
 ~padDryFader     = Synth(\drySend,    [\inBus, ~padDryBus,      \outBus, ~masterBus,     \ctrlBus, ~padDryCtrl],     target: ~dryGroup);
@@ -250,13 +268,15 @@ SynthDef(\masterFader, { |inBus=0, outBus=0, ctrlBus|
 ~delayFX         = Synth(\fxDelay,     [\inBus, ~delBus,        \outBus, ~fxGroup,       \ctrlBus, ~delCtrl],        target: ~fxsGroup);
 ~saturatorFX     = Synth(\fxSaturator, [\inBus, ~satBus,        \outBus, ~fxGroup,       \ctrlBus, ~satCtrl],        target: ~fxsGroup);
 
+// FX group fader
+~fxGroupFader    = Synth(\fxGroupFader,[\inBus, ~fxGroup,       \outBus, ~masterBus,     \ctrlBus, ~fxGroupCtrl],    target: ~fxMaster);
 
 // Master fader
-~masterFader     = Synth(\masterFader, [\inBus, ~masterBus,     \outBus, 0,              \ctrlBus, ~masterCtrl],     target: ~masterGroup);
+~masterFader     = Synth(\masterFader, [\inBus, ~masterBus,     \outBus, 0,              \ctrlBus, ~masterCtrl],     target: ~master);
 )
 
 
-// --- Full Mixer Console GUI ---
+// --- Mixer Console GUI ---
 
 (
 var win, rowIndices, channels, soloActive, updateStates, colInstrument, colGroup, colFX, colFxMaster, colMaster;
@@ -355,42 +375,54 @@ updateStates = {
                         ("[Instrument solo active]").postln;
                         if(c[\type] == \instrument) {
                             newVal = if(isSolo and: { mute.not }, val, 0);
-                        } {
-                            newVal = if(mute, 0, val);
-                        };
+						} {
+							newVal = if(mute, 0, val);
+						};
 
-                    } {
-                        if(soloedGroups.notEmpty) {
-                            ("[Group solo active]").postln;
-                            if(c[\type] == \group) {
-                                newVal = if(isSolo and: { mute.not }, val, 0);
-                            } {
-                                newVal = if(mute, 0, val);
-                            };
+					} {
+						if(soloedGroups.notEmpty) {
+							("[Group solo active]").postln;
+							if(c[\type] == \group) {
+								newVal = if(isSolo and: { mute.not }, val, 0);
+							} {
+								newVal = if(mute, 0, val);
+							};
 
-                        } {
-                            if(soloedFX.notEmpty) {
-                                ("[FX solo active]").postln;
-                                if(c[\type] == \fx and: { c[\name] != \FXMaster }) {
-                                    newVal = if(isSolo and: { mute.not }, val, 0);
-                                } {
-                                    newVal = if(mute, 0, val);
-                                };
+						} {
+							if(soloedFX.notEmpty) {
+								("[FX solo active]").postln;
 
-                            } {
-                                if(fxMasterSolo.notNil) {
-                                    ("[FX Master solo active]").postln;
-                                    if(c[\name] == \FXMaster) {
-                                        newVal = if(mute.not, val, 0);
-                                    } {
-                                        newVal = if(mute, 0, val);
-                                    };
-                                } {
-                                    newVal = if(mute, 0, val);
-                                };
-                            };
-                        };
-                    };
+								// 1. mute all dry sends
+								~drySends.keysValuesDo { |name, bus| bus.set(0) };
+								("Dry Sends muted (FX solo active): " ++ ~drySends.keys).postln;
+
+								// 2. per-channel logic
+								if(c[\type] == \fx and: { c[\name] != \FXMaster }) {
+									// Only keep soloed FX returns
+									newVal = if(isSolo and: { mute.not }, val, 0);
+								} {
+									if(c[\name] == \FXMaster) {
+										// FXMaster must stay open to pass reverb return!
+										newVal = if(mute.not, val, 0);
+									} {
+										newVal = if(mute, 0, val); // instruments & groups: normal mute logic
+									};
+								};
+							} {
+								if(fxMasterSolo.notNil) {
+									("[FX Master solo active]").postln;
+
+									// Mute all dry sends
+									~drySends.keysValuesDo { |name, bus| bus.set(0) };
+									("Dry Sends muted (FX Master solo active): " ++ ~drySends.keys).postln;
+
+									// everything else stays untouched
+									newVal = if(mute, 0, val);
+								};
+
+							};
+						};
+					};
                 } {
                     newVal = if(mute, 0, val);
                     ("[No solo active]").postln;
@@ -402,20 +434,6 @@ updateStates = {
 
             ("CTRL UPDATE -> " ++ c[\name] ++ " set to " ++ newVal).postln;
         };
-    };
-
-    // dry send handling
-    if(fxSoloActive) {
-        ~drySends.keysValuesDo { |name, bus| bus.set(0) };
-        ("Dry Sends muted (FX solo active): " ++ ~drySends.keys).postln;
-    } {
-        var dryDebug = [];
-        ~drySends.keysValuesDo { |name, bus|
-            var sliderVal = channels.detect { |ch| ch[\name] == name }[\slider].value;
-            bus.set(sliderVal);
-            dryDebug = dryDebug.add(name.asString ++ ":" ++ sliderVal);
-        };
-        ("Dry Sends restored: " ++ dryDebug).postln;
     };
 
     " END updateStates ".postln;
@@ -431,7 +449,7 @@ rowIndices = IdentityDictionary[
     \fx         -> 0
 ];
 
-channels.do { |c|
+channels.do { |c, i|
     var name = c[\name], color = c[\color], type = c[\type], ctrlBus = c[\ctrlBus];
     var slider, muteBtn, soloBtn, label, yOffset, xOffset;
 
@@ -440,47 +458,44 @@ channels.do { |c|
         \instrument, { 50 },
         \group,      { 300 },
         \fx,         { 550 },
-        \master,     { 550 },   // Master sits with FX row
+        \master,     { 550 },
         { 50 }
     );
 
     // row-specific xOffset
     if(type == \master) {
-        // Master should be placed after all FX channels
         xOffset = rowIndices[\fx] * 100 + 50;
     } {
         xOffset = rowIndices[type] * 100 + 50;
-        rowIndices[type] = rowIndices[type] + 1;  // increment for non-master
+        rowIndices[type] = rowIndices[type] + 1;
     };
 
     // Slider
     slider = Slider(win, Rect(xOffset, yOffset, 30, 150))
         .background_(color)
-        .value_(ctrlBus.getSynchronous)   // start at current bus value
-        .action_({ |sl|
-            ctrlBus.set(sl.value);        // update the bus
-            updateStates.();
-        });
+        .value_(ctrlBus.getSynchronous)
+	.action_({ |sl| ctrlBus.set(sl.value); updateStates.() });
 
 	// Mute Button
 	if(type == \master) {
-		// Center mute under master slider
+		// Centered under slider
 		muteBtn = Button(win, Rect(xOffset + 2, yOffset + 160, 25, 20))
 		.states_([["M", Color.black, Color(1,0.3,0.3)], ["M", Color.white, Color.red]])
 		.action_({ updateStates.() });
 	} {
-		// Default placement (to the left)
+		// Default (left-aligned)
 		muteBtn = Button(win, Rect(xOffset - 10, yOffset + 160, 25, 20))
 		.states_([["M", Color.black, Color(1,0.3,0.3)], ["M", Color.white, Color.red]])
 		.action_({ updateStates.() });
 	};
 
-    // Solo Button (only for non-master channels)
+
+	// Solo Button (only non-master)
     if(type != \master) {
         soloBtn = Button(win, Rect(xOffset + 20, yOffset + 160, 25, 20))
             .states_([["S", Color.black, Color(0.7,0.7,1)], ["S", Color.white, Color.blue]])
             .action_({ updateStates.() });
-        c[\solo] = soloBtn;
+        channels[i][\solo] = soloBtn;
     };
 
     // Label
@@ -488,13 +503,11 @@ channels.do { |c|
         .align_(\center)
         .string_(name.asString);
 
-    // Store GUI elements back into channel dict
-    c[\slider] = slider;
-    c[\mute]   = muteBtn;
-    if(type != \master) { c[\solo] = soloBtn };
+    // Store GUI objects into the real channel dict
+    channels[i][\slider] = slider;
+    channels[i][\mute]   = muteBtn;
 };
 )
-
 
 (
 // --- Parameter Mapping Engine ---
@@ -586,7 +599,6 @@ rhythmicity from fluid/free to rhythmic/structured -> pulse emphasis
     droneAmp:     { ~mapExp.(~parameters[\density],     0, 1, 0.05, 0.2) },
     harpAmp:      { ~mapExp.(~parameters[\density],     0, 1, 0.5, 1) },
     noiseAmp:     { ~mapExp.(~parameters[\density],     0, 1, 0.5, 1) },
-    norm:         { ~mapExp.(~parameters[\density],     0, 1, 0.01, 0.05) },
     seaAmp:       { ~mapExp.(~parameters[\density],     0, 1, 0.2, 0.3) },
     rainAmp:      { ~mapExp.(~parameters[\density],     0, 1, 0.5, 1) },
 
@@ -609,22 +621,30 @@ rhythmicity from fluid/free to rhythmic/structured -> pulse emphasis
 
 // Mapped parametersfor buses
 ~paramBuses = IdentityDictionary.new;
+~paramBuses.keysDo { |k|
+    ("Bus % → index % → value: %"
+        .format(k, ~paramBuses[k].index, ~paramBuses[k].getSynchronous)
+    ).postln;
+};
 ~parameterMappings.keysDo { |key|
     ~paramBuses[key] = Bus.control(s,1);
 };
 
-// Update buses
+// Update buses function
 ~updateParamBuses = {
     {
         inf.do {
             ~parameterMappings.keysValuesDo { |key, func|
-                var val = func.();
-                ~paramBuses[key].set(val);
+				~paramBuses[key].set(func.());
             };
             0.1.wait;  // update every 100ms
         }
     }.fork(TempoClock.default);
 };
+
+// Run update bus function
+~paramUpdater = ~updateParamBuses.();
+
 
 // Quick set
 ~setParam = { |key, val|
@@ -672,7 +692,6 @@ SynthDef(\padSynth, { |out = 0, freq = 440, amp = 1, gate = 1, pan = 0|
     var osc, env, filt, mod, rev, snd;
 
     // Live parameters from mapped buses
-    var norm     = In.kr(~paramBuses[\norm]);         // oscillator balance
     var ffreq    = In.kr(~paramBuses[\filterCutoff]); // cutoff frequency (mapped from brightness)
     var rq       = In.kr(~paramBuses[\rq]);           // filter resonance (brightness shaping)
     var modRate  = In.kr(~paramBuses[\modRate]);      // LFO rate (variability → tempo-synced)
@@ -682,7 +701,7 @@ SynthDef(\padSynth, { |out = 0, freq = 440, amp = 1, gate = 1, pan = 0|
     var rel      = In.kr(~paramBuses[\rel]);          // release time (rhythmicity shaping)
 
     // Saw per voice
-    osc = Saw.ar(freq) * norm;
+    osc = Saw.ar(freq);
 
     // Filter modulation
     mod = SinOsc.kr(modRate, 0, modDepth, ffreq);
@@ -706,7 +725,6 @@ SynthDef(\darkPad, { |out=0, freq=220, amp=0.1, gate=1|
     var osc, sub, mix, lfo, env, filt, dist, crush, chorus, rev;
 
     // Live parameters from buses
-    var norm        = In.kr(~paramBuses[\norm]);          // oscillator balance
     var darkPadSub  = In.kr(~paramBuses[\darkPadSub]);    // sub level
     var darkPadBits = In.kr(~paramBuses[\darkPadBits]);   // bit depth
     var crushMix    = In.kr(~paramBuses[\crushMix]);      // bitcrush amount
@@ -719,7 +737,7 @@ SynthDef(\darkPad, { |out=0, freq=220, amp=0.1, gate=1|
     var rel         = In.kr(~paramBuses[\rel]);           // release
 
     // 2 saws slightly detuned (already thick enough)
-    osc = Saw.ar(freq) * norm;
+    osc = Saw.ar(freq);
 
     // add a deep sub layer (square or sine one octave down)
     sub = Pulse.ar(freq/2, 0.4) * darkPadSub;
@@ -769,7 +787,6 @@ SynthDef(\bassSynth, { |out = 0, freq = 60, amp = 0.3, gate = 1, pan = 0|
     var rq      = In.kr(~paramBuses[\rq]);           // resonance (brightness shaping)
     var subOct  = In.kr(~paramBuses[\sub]);          // sub level (warmth/density)
     var drive   = In.kr(~paramBuses[\drive]);        // drive/distortion (warmth)
-    var norm    = In.kr(~paramBuses[\bassAmp]);      // overall bass presence (density)
 
     // Main osc: pulse wave for bass body
     osc = Pulse.ar(freq, 0.45, 0.8);
@@ -803,7 +820,6 @@ SynthDef(\droneSynth, { |out = 0, freq = 55, amp = 0.2, pan = 0, gate = 1|
     var revMix      = In.kr(~paramBuses[\revMix]);       // reverb blend (density)
     var atk         = In.kr(~paramBuses[\atk]);          // attack (rhythmicity)
     var rel         = In.kr(~paramBuses[\rel]);          // release (rhythmicity)
-    var norm        = In.kr(~paramBuses[\droneAmp]);     // global drone level (density)
 
 	// store the multipliers first
 	detuneFactors = Array.fill(4, { LFNoise1.kr(0.1).range(1 - droneDetune, 1 + droneDetune) });
@@ -964,7 +980,6 @@ SynthDef(\bell, { |out = 0, freq = 220, amp = 0.3, pan = 0, gate = 1, revRoom=1,
 // Textrure Synths
 
 // Sea Sound
-// Sea Texture (bus-driven)
 SynthDef(\seaSynth, { |out = 0, amp = 0.1, pan = 0, sus = 1, gate = 1|
     var src, mod, filt, env, rev, waveLFO;
 
@@ -1003,18 +1018,9 @@ SynthDef(\seaSynth, { |out = 0, amp = 0.1, pan = 0, sus = 1, gate = 1|
 }).add;
 
 // Vinyl Crackle
-SynthDef(\vinylCrackle, { |out = 0, amp = 0.5, dustDensity=3|
+SynthDef(\vinylCrackle, { |out = 0, amp=0.1, dustDensity=4, lpFreq=4000, hpFreq=800, rumbleLevel=0.1, rumbleFreq=50, humLevel=0.02, wowRate=0.3, wowDepth=0.05|
     var trig, env, src, filtered, grainAmp, grainRel, saturated;
     var rumble, hum, wow, mix, panned;
-
-    // Live parameters from buses
-    var lpFreq      = In.kr(~paramBuses[\filterCutoff]);   // LP cutoff (brightness)
-    var hpFreq      = In.kr(~paramBuses[\lpfFactor]);      // HP cutoff (variability / scene)
-    var rumbleLevel = In.kr(~paramBuses[\rumbleLevel]);    // low rumble gain
-    var rumbleFreq  = In.kr(~paramBuses[\sub]);            // rumble cutoff frequency
-    var humLevel    = In.kr(~paramBuses[\humLevel]);       // hum gain
-    var wowRate     = In.kr(~paramBuses[\modRate]);        // wow speed (rhythmicity)
-    var wowDepth    = In.kr(~paramBuses[\modDepth]);       // wow depth (variability)
 
     // Crackles
     trig = Dust.kr(dustDensity);
@@ -1041,7 +1047,6 @@ SynthDef(\vinylCrackle, { |out = 0, amp = 0.5, dustDensity=3|
 }).add;
 
 // Rain Sound
-// Rain Texture (bus-driven)
 SynthDef(\rainTexture, { |out = 0, densFactor = 1, hp=400, lp=6000, amp=0.2|
     var trigNear, trigFar, nearDrops, farDrops, noiseBed, rain, rev;
     var densFar, densNear, revMix, rq, noiseAmp;
@@ -1410,7 +1415,7 @@ SynthDef(\rainTexture, { |out = 0, densFactor = 1, hp=400, lp=6000, amp=0.2|
 
 // Function to get amp for current chord size
 ~getAmpForVoices = { |numVoices|
-    ~ampLevels[numVoices] * 0.7 ? 0.1 // fallback if somehow outside 2..6
+    (1 / numVoices.sqrt) * 0.5   // adjust 0.5 as your global pad level
 };
 
 // --- Markov second order harmony (degrees 1..7) ---
@@ -1791,9 +1796,12 @@ SynthDef(\rainTexture, { |out = 0, densFactor = 1, hp=400, lp=6000, amp=0.2|
     }
 };
 
+// Set start values
 ~prevDegree = 1;
-~currentDegree = 4; // Starting point
+~currentDegree = 4;
+~sameDegreeCount = 0;
 
+// Calculate next degree
 ~nextDegree = {
 	var key, pairs, total, r, result, acc, penaltyFactor;
 
@@ -2075,16 +2083,16 @@ SynthDef(\kline, { |bus=0, start=0, end=1, dur=8, curve=0|
 
 (
 ~seaPattern = Pbind(
-    \instrument, \textureSynth,
-	\legato, Pwhite(0.97,1.03),
+    \instrument, \seaSynth,
+	\legato,      Pwhite(0.97,1.03),
 
     // time between waves, in beats
-	\dur, Pfunc({ ~getMapped.(\dur)}),
+	\dur,         Pfunc({ ~getMapped.(\dur)}),
 
     // envelope shaping
-    \atk, Pwhite(0.1, 0.4),   // proportion of dur
-    \sus, Pwhite(0.05, 0.2),   // proportion of dur
-    \rel, Pfunc { |ev|
+    \atk,         Pwhite(0.1, 0.4),   // proportion of dur
+    \sus,         Pwhite(0.05, 0.2),   // proportion of dur
+    \rel,         Pfunc { |ev|
         var beatDur = thisThread.clock.beatDur;
         var totalBeats = ev[\dur];
         var atkBeats   = (ev[\atk] * totalBeats);
@@ -2094,21 +2102,17 @@ SynthDef(\kline, { |bus=0, start=0, end=1, dur=8, curve=0|
     },
 
     // convert atk/sus also to seconds
-    \atk, Pfunc { |ev| ev[\atk] * ev[\dur] * thisThread.clock.beatDur },
-    \sus, Pfunc { |ev| ev[\sus] * ev[\dur] * thisThread.clock.beatDur },
+    \atk,         Pfunc { |ev| ev[\atk] * ev[\dur] * thisThread.clock.beatDur },
+    \sus,         Pfunc { |ev| ev[\sus] * ev[\dur] * thisThread.clock.beatDur },
 
     // synthesis params
-    \ffreq,     1500,
-    \rq,        0.7,
-    \modRate,   Pfunc({ ~getMapped.(\modRate) } * 0.5),
-    \modDepth,  Pfunc({ ~getMapped.(\modDepth) }),
-    \pinkAmt,   Pfunc({ ~getMapped.(\noisePink) }),
-    \whiteAmt,  Pfunc({ ~getMapped.(\noiseWhite) }),
-    \revMix,    Pfunc({ ~getMapped.(\revMix) }),
-    \waveDepth, Pfunc({ ~mapLin.(~parameters[\density], 0, 1, 0.1, 0.6) }),
-    \waveRate,  Pfunc({ ~mapLin.(~parameters[\variability], 0, 1, 0.02, 0.08) }),
-    \pan,       Pwhite(-1.0, 1.0),
-    \amp,       Pfunc({ ~getMapped.(\seaAmp) })
+    \ffreq,       1500,
+    \rq,          0.7,
+    \waveDepth,   Pfunc({ ~mapLin.(~parameters[\density], 0, 1, 0.1, 0.6) }),
+    \waveRate,    Pfunc({ ~mapLin.(~parameters[\variability], 0, 1, 0.02, 0.08) }),
+    \pan,         Pwhite(-1.0, 1.0),
+    \amp,         Pfunc({ ~getMapped.(\seaAmp) }),
+	\out,         ~seaBus
 );
 
 ~vinylPattern = Pmono(
@@ -2122,19 +2126,19 @@ SynthDef(\kline, { |bus=0, start=0, end=1, dur=8, curve=0|
     \hpFreq,      Pwhite(500, 1500),
 	\humLevel,    Pfunc({ ~getMapped.(\humLevel) }),
     \rumbleLevel, Pfunc({ ~getMapped.(\rumbleLevel) }),
-    \amp, Pfunc({ ~getMapped.(\seaAmp) } ),
-	\out, ~vinylBus
+    \amp,         Pfunc({ ~getMapped.(\seaAmp) } ),
+	\out,        ~vinylBus
 );
 
 ~rainPattern = Pmono(
     \rainTexture,
-    \dur, Pfunc({ ~getMapped.(\dur) }),   // update every cycle
-    \densFactor, Pfunc({ ~mapLin.(~parameters[\variability], 0, 1, 1, 2) }),
-    \highpass, Pfunc({ ~mapLin.(~parameters[\brightness], 0, 1, 200, 2000) }),
-    \lowpass,  Pfunc({ ~mapLin.(~parameters[\brightness], 0, 1, 3000, 8000) }),
-    \revMix,   Pfunc({ ~getMapped.(\revMix) }),
-    \amp,      Pfunc({ ~getMapped.(\rainAmp) }),
-	\out, ~rainBus
+    \dur,         Pfunc({ ~getMapped.(\dur) }),   // update every cycle
+    \densFactor,  Pfunc({ ~mapLin.(~parameters[\variability], 0, 1, 1, 2) }),
+    \highpass,    Pfunc({ ~mapLin.(~parameters[\brightness], 0, 1, 200, 2000) }),
+    \lowpass,     Pfunc({ ~mapLin.(~parameters[\brightness], 0, 1, 3000, 8000) }),
+    \revMix,      Pfunc({ ~getMapped.(\revMix) }),
+    \amp,         Pfunc({ ~getMapped.(\rainAmp) }),
+	\out,         ~rainBus
 );
 )
 
@@ -2197,17 +2201,12 @@ Pdef(\ambgen,
             if(~layerOn[\Pad]) {
                 padFreqs.do { |f, i|
                     padSynths.add(Synth(\padSynth, [
-                        \freq, f,
-                        \pan, padPans[i],
-                        \legato,  ~getMapped.(\legato),
-                        \modRate, ~getMapped.(\modRate),
-                        \ffreq,   ~getMapped.(\filterCutoff),
-                        \revMix,  ~getMapped.(\revMix) * 0.7,
-                        \atk,     ~getMapped.(\atk),
-                        \rel,     ~getMapped.(\rel),
-                        \rq,      ~getMapped.(\rq),
-                        \amp,     ~getAmpForVoices.(chord.size),
-                        \out,     ~padBus
+                        \dur,    ~getMapped.(\dur),
+						\freq,   f,
+                        \pan,    padPans[i],
+                        \legato, ~getMapped.(\legato),
+                        \amp,    ~getAmpForVoices.(chord.size),
+                        \out,    ~padBus
                     ]));
                 };
             };
@@ -2216,21 +2215,12 @@ Pdef(\ambgen,
             if(~layerOn[\DarkPad]) {
                 padFreqs.do { |f, i|
                     darkPadSynths.add(Synth(\darkPad, [
-                        \freq, f * 0.5,
-                        \pan, padPans[i],
-                        \legato,      ~getMapped.(\legato),
-                        \darkPadSub,  ~getMapped.(\darkPadSub),
-                        \distAmt,     ~getMapped.(\distAmt),
-                        \crushMix,    ~getMapped.(\crushMix),
-                        \modRate,     ~getMapped.(\modRate),
-                        \ffreq,       ~getMapped.(\darkPadCutoff),
-                        \darkPadBits, ~getMapped.(\darkPadBits),
-                        \revMix,      ~getMapped.(\revMix) * 0.7,
-                        \atk,         ~getMapped.(\atk),
-                        \rel,         ~getMapped.(\rel),
-                        \rq,          ~getMapped.(\rq),
-                        \amp,         ~getAmpForVoices.(chord.size),
-                        \out,         ~darkPadBus
+                        \dur,    ~getMapped.(\dur),
+						\freq,   f * 0.5,
+                        \legato, ~getMapped.(\legato),
+						\pan,    padPans[i],
+                        \amp,    ~getAmpForVoices.(chord.size),
+                        \out,    ~darkPadBus
                     ]));
                 };
             };
@@ -2238,14 +2228,9 @@ Pdef(\ambgen,
             // BASS
             if(~layerOn[\Bass]) {
                 bassSynths.add(Synth(\bassSynth, [
-                    \freq,  bassFreq,
+                    \dur,    ~getMapped.(\dur),
+					\freq,   bassFreq,
                     \legato, ~getMapped.(\legato) * 0.97,
-                    \ffreq,  ~getMapped.(\filterCutoff),
-                    \rq,     ~getMapped.(\rq),
-                    \subOct, ~getMapped.(\sub),
-                    \drive,  ~getMapped.(\drive),
-                    \atk,    ~getMapped.(\atk),
-                    \rel,    ~getMapped.(\rel),
                     \amp,    ~getMapped.(\bassAmp),
                     \out,    ~bassBus
                 ]));
@@ -2254,15 +2239,11 @@ Pdef(\ambgen,
             // DRONE
             if(~layerOn[\Drone]) {
                 droneSynths.add(Synth(\droneSynth, [
-                    \freq,        ~getDroneNote.(~droneDegrees.choose, 2).midicps,
-                    \droneDetune, ~getMapped.(\droneDetune),
-                    \lfoRate,     ~getMapped.(\droneLfoRate),
-                    \ffreq,       ~getMapped.(\filterCutoff),
-                    \rq,          ~getMapped.(\rq),
-                    \revMix,      ~getMapped.(\revMix) * 1.5,
-                    \pan,         rrand(-0.5, 0.5),
-                    \amp,         ~getMapped.(\droneAmp),
-                    \out,         ~droneBus
+                    \dur,    ~getMapped.(\dur),
+					\freq,   ~getDroneNote.(~droneDegrees.choose, 2).midicps,
+                    \pan,    rrand(-0.5, 0.5),
+                    \amp,    ~getMapped.(\droneAmp),
+                    \out,    ~droneBus
                 ]));
             };
 
@@ -2271,13 +2252,13 @@ Pdef(\ambgen,
                 sp.par(
                     Pbind(
                         \instrument, \harpPluck,
-                        \dur, Pseq(durations, 1),
-                        \freq, Pxrand(chord.midicps, inf),
+                        \dur,   ~getMapped.(\dur),
+						\dur,   Pseq(durations, 1),
+                        \freq,  Pxrand(chord.midicps, inf),
                         \decay, Pwhite(2, 5, inf),
-                        \pan, Pwhite(-0.6, 0.6, inf),
-                        \revMix, ~getMapped.(\revMix),
-                        \amp, ~getMapped.(\harpAmp),
-                        \out, ~harpBus
+                        \pan,   Pwhite(-0.6, 0.6, inf),
+                        \amp,   ~getMapped.(\harpAmp),
+                        \out,   ~harpBus
                     )
                 );
             };
@@ -2287,13 +2268,11 @@ Pdef(\ambgen,
                 sp.par(
                     Pbind(
                         \instrument, \glassArp,
-                        \dur, Pseq(durations, 1),
-                        \freq, Pxrand(chord.midicps * 2, inf),
-                        \bright, ~getMapped.(\bright),
-                        \pan, Pwhite(-0.6, 0.6, inf),
-                        \revMix, ~getMapped.(\revMix) * 1.3,
-                        \amp, ~getMapped.(\harpAmp),
-                        \out, ~glassBus
+                        \dur,   Pseq(durations, 1),
+						\freq, Pxrand(chord.midicps * 2, inf),
+                        \pan,   Pwhite(-0.6, 0.6, inf),
+                        \amp,   ~getMapped.(\harpAmp),
+                        \out,   ~glassBus
                     )
                 );
             };
@@ -2303,13 +2282,12 @@ Pdef(\ambgen,
                 sp.par(
                     Pbind(
                         \instrument, \bell,
-                        \dur, Pseq(Array.fill(4, { dur/4 }), 1),
+                        \dur,    Pseq(Array.fill(4, { dur/4 }), 1),
                         \legato, ~getMapped.(\legato) * 0.97,
-                        \freq, bassFreq * 2,
-                        \lpfFactor, ~getMapped.(\lpfFactor),
-                        \revMix, ~getMapped.(\revMix),
-                        \amp, ~getMapped.(\bellAmp),
-                        \type, Pseq({
+                        \freq,   bassFreq * 2,
+                        \amp,    ~getMapped.(\bellAmp),
+						\out,    ~bellBus,
+                        \type,   Pseq({
                             var decisions = Array.fill(4, { \rest });
                             var step = (0..3);
                             var bellPlayed = false;
@@ -2330,7 +2308,6 @@ Pdef(\ambgen,
                             };
                             decisions
                         }.(), 1),
-                        \out, ~bellBus
                     )
                 );
             };
@@ -2424,6 +2401,64 @@ Routine({
 )
 
 
+
+
+
+x = Synth(\padSynth, [\freq, 220, \amp, 0.3, \out, 0]);
+x.fre
+
+~updateParamBuses.();
+(
+SynthDef(\padTest, { |out=0, freq=220|
+    var osc = Saw.ar(freq);
+    Out.ar(out, osc * 0.1 ! 2);
+}).add;
+)
+Synth(\padTest);
+
+
+// Monitor Buses
+(
+~busDebug = Routine({
+    inf.do {
+        ~paramBuses.keysDo { |k|
+            ~paramBuses[k].get { |val|
+                ("% = %".format(k, val)).postln;
+            };
+        };
+        1.0.wait; // print every second
+    }
+}).play(SystemClock);
+)
+
+// stop it:
+~busDebug.stop;
+
+(
+SynthDef(\debugBus, { |bus|
+    var val = In.kr(bus, 1);
+    Poll.kr(Impulse.kr(1), val, "Bus value");
+}).add;
+)
+
+// Run a debug synth on your modRate bus
+y = Synth(\debugBus, [\bus, ~paramBuses[\modRate]]);
+
+y.free;
+
+~updateParamBuses.isNil;   // should return false if it's defined
+// stop old updater (if one is running in a fork)
+thisProcess.stop;
+
+// restart the updater
+~updateParamBuses.();
+~paramUpdater.isPlaying;   // true if it’s running
+
+
+
+
+
+
 // --- Usage & Checks ---
 
 // Define key and scale
@@ -2470,4 +2505,7 @@ SynthDescLib.global.browse; // browse all available defs
 
 // Reset mixer when all buses are used up
 ~resetMixer.();
+s.options.device_("YourAudioDeviceName"); // choose correct device
+s.reboot;
+
 
