@@ -190,16 +190,16 @@ SynthDef(\masterFader, { |inBus=0, outBus=0, ctrlBus|
 ~masterCtrl      = Bus.control(s, 1).set(1);
 
 // Instrument control
-~padCtrl         = Bus.control(s, 1).set(1);
-~darkPadCtrl     = Bus.control(s, 1).set(1);
-~bassCtrl        = Bus.control(s, 1).set(1);
-~droneCtrl       = Bus.control(s, 1).set(1);
-~bellCtrl        = Bus.control(s, 1).set(1);
-~harpCtrl        = Bus.control(s, 1).set(1);
-~glassCtrl       = Bus.control(s, 1).set(1);
-~seaCtrl         = Bus.control(s, 1).set(1);
-~rainCtrl        = Bus.control(s, 1).set(1);
-~vinylCtrl       = Bus.control(s, 1).set(1);
+~padCtrl         = Bus.control(s, 1).set(0.5);
+~darkPadCtrl     = Bus.control(s, 1).set(0.5);
+~bassCtrl        = Bus.control(s, 1).set(0.5);
+~droneCtrl       = Bus.control(s, 1).set(0.5);
+~bellCtrl        = Bus.control(s, 1).set(0.5);
+~harpCtrl        = Bus.control(s, 1).set(0.5);
+~glassCtrl       = Bus.control(s, 1).set(0.5);
+~seaCtrl         = Bus.control(s, 1).set(0.5);
+~rainCtrl        = Bus.control(s, 1).set(0.5);
+~vinylCtrl       = Bus.control(s, 1).set(0.5);
 
 // FX control
 ~revCtrl         = Bus.control(s, 1).set(1);
@@ -1043,7 +1043,7 @@ SynthDef(\seaSynth, { |out = 0, amp = 0.3, waveDepth = 0.4 , pan = 0, sus = 2, a
     // Reverb space
     rev = FreeVerb.ar(filt * env * amp * waveLFO, mix: revMix, room: 0.9, damp: 0.7);
 
-	// Debugs
+	/*// Debugs
 	Poll.kr(Impulse.kr(2), mod, "seaSynth MOD");
 	Poll.kr(Impulse.kr(2), rq, "seaSynth RQ");
 	Poll.kr(Impulse.kr(2), ffreq, "seaSynth ffreq");
@@ -1054,7 +1054,7 @@ SynthDef(\seaSynth, { |out = 0, amp = 0.3, waveDepth = 0.4 , pan = 0, sus = 2, a
 	Poll.kr(Impulse.kr(2), waveLFO, "seaSynth waveLFO");
     Poll.kr(Impulse.kr(2), env, "seaSynth env");
     Poll.kr(Impulse.kr(2), amp, "seaSynth amp (arg)");
-    Poll.kr(Impulse.kr(2), rev, "seaSynth rev");
+    Poll.kr(Impulse.kr(2), rev, "seaSynth rev");*/
 
 	Out.ar(out, Pan2.ar(rev, pan));
 
@@ -1996,19 +1996,29 @@ SynthDef(\rainTexture, { |out = 0, densFactor = 1, hp=400, lp=6000, amp=0.2|
 ];
 
 // Control-bus ramp (for faders/sends/master etc.)
-SynthDef(\fade, { |bus, start = 0, end = 1, dur = 8, curve = -2|
-	var ctl = EnvGen.kr(Env([start, end], [dur], curve), doneAction:2);
-	Out.kr(bus, ctl);
+SynthDef(\fade, { |bus, start = 0, end = 1, dur = 8|
+	// protect against zero values in exponential fades
+    var safeStart = start.max(0.0001);
+    var safeEnd   = end.max(0.0001);
+
+	// envelope to create the fade
+	var ctl = EnvGen.kr(Env([start, end], [dur], \exp), doneAction:2);
+
+	ReplaceOut.kr(bus, ctl);
+
+	Poll.kr(Impulse.kr(1), ctl, label: "fade ctl");  // debug
 }).add;
 
+
 // Helper to fade any control bus
+~busLevels = IdentityDictionary.new;
 ~fadeSmart = { |bus, target=0.0, time=8.0|
-    var current = bus.getSynchronous;
+	var current = (~busLevels[bus] ? 0.0).max(0.0001);
     var start;
 
     if(current <= 0.001 and: { target > 0 }) {
         // case 1: new instrument
-        start = 0.0;
+        start = 0.0001;
     } {
         if(target <= 0.001) {
             // case 2: fade out
@@ -2020,6 +2030,12 @@ SynthDef(\fade, { |bus, start = 0, end = 1, dur = 8, curve = -2|
     };
 
     Synth(\fade, [\bus, bus, \start, start, \end, target, \dur, time, \curve, -2], target: ~masterGroup);
+
+	~busLevels[bus] = target;  // update mirror
+
+	("[fadeSmart] bus % (idx %) from % to % in %s"
+    .format(bus, bus.index, start, target, time)).postln;
+
 };
 
 ~targetsToFades = { |targets, time=8|
@@ -2151,22 +2167,22 @@ SynthDef(\fade, { |bus, start = 0, end = 1, dur = 8, curve = -2|
 // A compact, tasteful starting timeline (≈ 20–25 min depending on your ~dur map)
 ~scenes = [
 	(
-		name: \intro, fadeTime: 16, paramTime: 40, dur: 4,
+		name: \intro, fadeTime: 8, paramTime: 40, dur: 4,
 		key: [\D, 3], scale: \yo,
 		layersOn: (SeaTex:true, Drone:true),
-		targets: (SeaTex:1, Drone:1, Master:1.0, FXMaster:0.9, ReverbFX:0.8, DelayFX:0.30),
+		targets: (SeaTex:1.0, Drone:1.0, Master:1.0, FXMaster:0.9, ReverbFX:0.8, DelayFX:0.3),
 		params: (warmth:0.25, brightness:0.35, density:0.2, variability:0.2, rhythmicity:0.2)
 	),
 
 	(
-		name: \firstPads, fadeTime: 20, paramTime: 60, dur: 8,
+		name: \firstPads, fadeTime: 4, paramTime: 60, dur: 8,
 		layersOn: (Pad:true, Drone:true, SeaTex:true),
 		targets: (Pad:0.55, Drone:0.18, SeaTex:0.3, VinylTex:0.0, Master:1.0, ReverbFX:0.85, DelayFX:0.25),
 		params: (warmth:0.5, brightness:0.45, density:0.25, variability:0.22, rhythmicity:0.25)
 	),
 
 	(
-		name: \shimmer, fadeTime: 18, paramTime: 60, dur: 6,
+		name: \shimmer, fadeTime: 4, paramTime: 60, dur: 6,
 		scale: \lydianDominant,
 		layersOn: (GlassArp:true, HarpArp:true, RainTex:true),
 		targets: (GlassArp:0.18, HarpArp:0.12, RainTex:0.22, Master:1.0, DelayFX:0.45, ReverbFX:0.9),
@@ -2174,21 +2190,21 @@ SynthDef(\fade, { |bus, start = 0, end = 1, dur = 8, curve = -2|
 	),
 
 	(
-		name: \ground, fadeTime: 22, paramTime: 70, dur: 12,
+		name: \ground, fadeTime: 6, paramTime: 70, dur: 12,
 		layersOn: (RainTex:true, Bass:true, DarkPad:true),
 		targets: (Bass:0.5, DarkPad:0.28, Pad:0.4, Drone:0.15, Master:1.0, DelayFX:0.3, SaturatorFX:0.15),
 		params: (warmth:0.7, brightness:0.5, density:0.38, rhythmicity:0.35)
 	),
 
 	(
-		name: \punctuate, fadeTime: 12, paramTime: 30, dur: 6,
+		name: \punctuate, fadeTime: 2, paramTime: 30, dur: 6,
 		layersOn: (VinylTex:true, Bell:true, HarpArp:true),
 		targets: (VinylTex:0.2, Bell:0.14, HarpArp:0.1, Master:1.0, DelayFX:0.35, ReverbFX:0.95),
 		params: (variability:0.28, density:0.3)
 	),
 
 	(
-		name: \exhale, fadeTime: 24, paramTime: 60, dur: 8,
+		name: \exhale, fadeTime: 8, paramTime: 60, dur: 8,
 		scale: \inSen,
 		layersOn: (Pad:true, Drone:true, SeaTex:true, VinylTex:true),
 		targets: (Pad:0.25, Drone:0.1, RainTex:0.08, SeaTex:0.25, VinylTex:0.2, Master:1.0, DelayFX:0.15, ReverbFX:0.8),
@@ -2651,6 +2667,10 @@ Pdef(\ambgen,
 )
 
 ~stopRoutine.(\instrumentChanger);
+
+
+~busLevels.postln;
+
 
 
 // --- Usage & Checks ---
