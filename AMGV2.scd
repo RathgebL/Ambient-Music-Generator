@@ -1997,13 +1997,13 @@ SynthDef(\rainTexture, { |out = 0, densFactor = 1, hp=400, lp=6000, amp=0.2|
 ];
 
 // Control-bus ramp (for faders/sends/master etc.)
-SynthDef(\fade, { |bus, start = 0, end = 1, dur = 8|
+SynthDef(\fade, { |bus, start = 0, end = 1, dur = 8, curve = -0.5|
 	// protect against zero values in exponential fades
     var safeStart = start.max(0.0001);
     var safeEnd   = end.max(0.0001);
 
 	// envelope to create the fade
-	var ctl = EnvGen.kr(Env([start, end], [dur], \exp), doneAction:2);
+	var ctl = EnvGen.kr(Env([start, end], [dur], curve), doneAction:2);
 
 	ReplaceOut.kr(bus, ctl);
 
@@ -2012,32 +2012,43 @@ SynthDef(\fade, { |bus, start = 0, end = 1, dur = 8|
 
 
 // Helper to fade any control bus
+
 ~busLevels = IdentityDictionary.new;
+
 ~fadeSmart = { |bus, target=0.0, time=8.0|
-	var current = (~busLevels[bus] ? 0.0).max(0.0001);
-    var start;
+    var current = (~busLevels[bus] ? 0.0).max(0.0001);
+    var start, curve;
 
     if(current <= 0.001 and: { target > 0 }) {
-        // case 1: new instrument
+        // case 1: new instrument (fade in from silence)
         start = 0.0001;
+        curve = -0.5;   // gentle exponential rise
     } {
         if(target <= 0.001) {
             // case 2: fade out
             start = current;
+            curve = 0.5; // convex (smooth decay)
         } {
-            // case 3: adjustment
+            // case 3: adjustment (between two non-zero values)
             start = current;
+            curve = 0;   // linear
         }
     };
 
-    Synth(\fade, [\bus, bus, \start, start, \end, target, \dur, time, \curve, -2], target: ~masterGroup);
+    Synth(\fade, [
+        \bus, bus,
+        \start, start,
+        \end, target,
+        \dur, time,
+        \curve, curve
+    ], target: ~masterGroup);
 
-	~busLevels[bus] = target;  // update mirror
+    ~busLevels[bus] = target;  // update mirror
 
-	("[fadeSmart] bus % (idx %) from % to % in %s"
-    .format(bus, bus.index, start, target, time)).postln;
-
+    ("[fadeSmart] bus % (idx %) from % to % in %s (curve %)"
+        .format(bus, bus.index, start, target, time, curve)).postln;
 };
+
 
 ~targetsToFades = { |targets, time=8|
     if(targets.isNil) { ^nil };
@@ -2170,7 +2181,7 @@ SynthDef(\fade, { |bus, start = 0, end = 1, dur = 8|
 	(
 		name: \intro, fadeTime: 8, paramTime: 40, dur: 4,
 		key: [\D, 3], scale: \yo,
-		layersOn: (SeaTex:true, Drone:true, Pad:false, DarkPad:false, Bass:false, Bell:false, HarpArp:false, GlassArp:false, Bell:false, RainTex:false, VinylTex:false),
+		layersOn: (SeaTex:true, Drone:true, Pad:false, DarkPad:false, Bass:false, HarpArp:false, GlassArp:false, Bell:false, RainTex:false, VinylTex:false),
 		targets: (SeaTex:1.0, Drone:1.0, DarkPad:0, Pad:0, Bass:0, Bell:0, HarpArp:0, GlassArp:0, Bell:0, RainTex:0, VinylTex:0, Master:1.0, FXMaster:0.85, ReverbFX:0.6, DelayFX:0.2),
 		params: (warmth:0.4, brightness:0.35, density:0.2, variability:0.2, rhythmicity:0.3)
 	),
@@ -2187,7 +2198,7 @@ SynthDef(\fade, { |bus, start = 0, end = 1, dur = 8|
 		scale: \lydianDominant,
 		layersOn: (GlassArp:true, Pad:true, RainTex:true, SeaTex:false),
 		targets: (GlassArp:1.0, Pad:0.7, RainTex:1, SeaTex:0, Master:1.0, DelayFX:0.4, ReverbFX:0.7),
-		params: (brightness:0.6, density:0.3, variability:0.35, wamth:0.8, rhythmicity:0.3)
+		params: (brightness:0.6, density:0.3, variability:0.35, warmth:0.8, rhythmicity:0.3)
 	),
 
 	(
