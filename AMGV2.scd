@@ -3,7 +3,6 @@
 (
 s.options.numAudioBusChannels = 512;
 s.reboot;
-s.scope;
 s.meter;
 s.plotTree;
 
@@ -15,6 +14,8 @@ s.plotTree;
 	"Mixer fully reset.".postln;
 };
 )
+
+s.scope;
 
 
 (
@@ -29,8 +30,7 @@ s.plotTree;
 ~sendsGroup        = Group.after(~dryGroup);         // sends to FX
 ~fxsGroup          = Group.after(~sendsGroup);       // FX processors
 ~fxMaster          = Group.after(~fxsGroup);         // FX master
-~master            = Group.after(~fxMaster);        // final master fader
-
+~master            = Group.after(~fxMaster);         // final master fader
 
 // Fader with control bus
 SynthDef(\fader, { |inBus, outBus, ctrlBus|
@@ -573,7 +573,7 @@ rhythmicity from fluid/free to rhythmic/structured -> pulse emphasis
     drive:        { ~mapLin.(~parameters[\warmth],      0, 1, 0.05, 0.5) },
     humLevel:     { ~mapExp.(~parameters[\warmth],      0, 1, 0.01, 0.05) },
     lpfFactor:    { ~mapLin.(~parameters[\warmth],      0, 1, 3, 12) },
-	// modDepth:     { ~mapLin.(~parameters[\warmth],      0, 1, 1, 1000) },
+	modDepth:     { ~mapLin.(~parameters[\warmth],      0, 1, 1, 500)},
     noisePink:    { ~mapLin.(~parameters[\warmth],      1, 0, 0.8, 0.2) },
     noiseWhite:   { ~mapLin.(~parameters[\warmth],      0, 1, 0.2, 0.8) },
     revDamp:      { ~mapLin.(~parameters[\warmth],      0, 1, 0.2, 0.8) },
@@ -582,7 +582,7 @@ rhythmicity from fluid/free to rhythmic/structured -> pulse emphasis
 
     darkPadCutoff:{ ~mapExp.(~parameters[\brightness],  0, 1, 200, 2000) },
     filterCutoff: { ~mapExp.(~parameters[\brightness],  0, 1, 2000, 8000) },
-    rq:           { ~mapLin.(~parameters[\brightness],  0, 1, 2, 0.5)},
+    rq:           { ~mapLin.(~parameters[\brightness],  0, 1, 1.5, 0.5)},
     bright:       { ~mapLin.(~parameters[\brightness],  0, 1, 0.7, 0.2)},
 
     darkPadBits:  { ~mapLin.(~parameters[\variability], 0, 1, 4, 6).round.asInteger },
@@ -604,11 +604,6 @@ rhythmicity from fluid/free to rhythmic/structured -> pulse emphasis
     seaAmp:       { ~mapExp.(~parameters[\density],     0, 1, 0.1, 0.3) },
     rainAmp:      { ~mapExp.(~parameters[\density],     0, 1, 0.5, 1) },
 	vinylAmp:     { ~mapExp.(~parameters[\density],     0, 1, 0.1, 0.2) },
-
-	modDepth: {
-		var lfo = SinOsc.kr(0.5).range(1, 1000); // LFO modulating the max
-		~mapLin.(~parameters[\warmth], 0, 1, 0, lfo)
-	},
 
     numVoices: {
         var raw = ~mapLin.(~parameters[\density], 0, 1, 1, 9).round.asInteger;
@@ -694,8 +689,8 @@ rhythmicity from fluid/free to rhythmic/structured -> pulse emphasis
             .format(key, val)).postln;
     };
 
-    ("[ParamUpdate] % = %, mapped → %"
-        .format(key, val, mapped ?? "nil")).postln;
+    /*("[ParamUpdate] % = %, mapped → %"
+        .format(key, val, mapped ?? "nil")).postln;*/
 };
 
 // Sets multiple parameters
@@ -1017,7 +1012,7 @@ SynthDef(\bell, { |out = 0, freq = 220, amp = 0.3, pan = 0, gate = 1, revRoom=1,
 // Textrure Synths
 
 // Sea Sound
-SynthDef(\seaSynth, { |out = 0, amp = 0.1, pan = 0, sus = 2, atk = 1, rel = 4, gate = 1|
+SynthDef(\seaSynth, { |out = 0, amp = 0.3, waveDepth = 0.4 , pan = 0, sus = 2, atk = 1, rel = 4, gate = 1|
     var src, mod, filt, env, rev, waveLFO;
 
     // Live parameters from mapped buses
@@ -1029,7 +1024,6 @@ SynthDef(\seaSynth, { |out = 0, amp = 0.1, pan = 0, sus = 2, atk = 1, rel = 4, g
     var whiteAmt  = In.kr(~paramBuses[\noiseWhite]);     // white noise share ← brightness
     var revMix    = In.kr(~paramBuses[\revMix]);         // reverb mix ← density
     var waveRate  = In.kr(~paramBuses[\droneLfoRate]);   // slow wave swell rate ← variability
-    var waveDepth = In.kr(~paramBuses[\seaAmp]);         // swell depth ← density / scene
 
     // Noise source (warm)
     src = PinkNoise.ar(pinkAmt) + WhiteNoise.ar(whiteAmt);
@@ -1049,7 +1043,21 @@ SynthDef(\seaSynth, { |out = 0, amp = 0.1, pan = 0, sus = 2, atk = 1, rel = 4, g
     // Reverb space
     rev = FreeVerb.ar(filt * env * amp * waveLFO, mix: revMix, room: 0.9, damp: 0.7);
 
-    Out.ar(out, Pan2.ar(rev, pan));
+	// Debugs
+	Poll.kr(Impulse.kr(2), mod, "seaSynth MOD");
+	Poll.kr(Impulse.kr(2), rq, "seaSynth RQ");
+	Poll.kr(Impulse.kr(2), ffreq, "seaSynth ffreq");
+	Poll.kr(Impulse.kr(2), modDepth, "seaSynth ModDepth");
+	Poll.kr(Impulse.kr(2), modRate, "seaSynth ModRate");
+	Poll.kr(Impulse.kr(2), src, "seaSynth source");
+	Poll.kr(Impulse.kr(2), filt, "seaSynth filt");
+	Poll.kr(Impulse.kr(2), waveLFO, "seaSynth waveLFO");
+    Poll.kr(Impulse.kr(2), env, "seaSynth env");
+    Poll.kr(Impulse.kr(2), amp, "seaSynth amp (arg)");
+    Poll.kr(Impulse.kr(2), rev, "seaSynth rev");
+
+	Out.ar(out, Pan2.ar(rev, pan));
+
 }).add;
 
 // Vinyl Crackle
@@ -1177,7 +1185,11 @@ SynthDef(\rainTexture, { |out = 0, densFactor = 1, hp=400, lp=6000, amp=0.2|
 // choose scale by name
 ~setScale = { |name=\ionian|
     var pcs = ~scales[name];
-    if(pcs.isNil) { ("Unknown scale: " ++ name).warn } { ~scalePcs = pcs; };
+    if(pcs.isNil) {
+        ("Unknown scale: " ++ name ++ " → defaulting to ionian").warn;
+        pcs = ~scales[\ionian];
+    };
+    ~scalePcs = pcs;
     ("Scale set to " ++ name ++ " → " ++ ~scalePcs).postln;
 };
 
@@ -1218,6 +1230,20 @@ SynthDef(\rainTexture, { |out = 0, densFactor = 1, hp=400, lp=6000, amp=0.2|
 		++ note.midicps).postln;
 
 	note
+};
+
+// Getter for chord size with randomness influenced by variability
+~getChordSize = {
+    var baseSize = ~mapLin.(~parameters[\density], 0, 1, 2, 5).round.asInteger;
+    var varChance = ~mapLin.(~parameters[\variability], 0, 1, 0.0, 0.6);
+
+    // Randomly add or subtract 1 based on variability chance
+    if(varChance.coin) {
+        baseSize = baseSize + ([-1, 1].choose);
+    };
+
+    // Constrain size between 2 and 5 voices
+    baseSize.clip(2, 5)
 };
 
 // Build a chord by weighted selection (now reacts to variability)
@@ -1394,20 +1420,6 @@ SynthDef(\rainTexture, { |out = 0, densFactor = 1, hp=400, lp=6000, amp=0.2|
 
         led
     }
-};
-
-// Getter for chord size with randomness influenced by variability
-~getChordSize = {
-    var baseSize = ~mapLin.(~parameters[\density], 0, 1, 2, 5).round.asInteger;
-    var varChance = ~mapLin.(~parameters[\variability], 0, 1, 0.0, 0.6);
-
-    // Randomly add or subtract 1 based on variability chance
-    if(varChance.coin) {
-        baseSize = baseSize + ([-1, 1].choose);
-    };
-
-    // Constrain size between 2 and 6 voices
-    baseSize.clip(2, 5)
 };
 
 // Build a chord with voice leading
@@ -1948,10 +1960,18 @@ SynthDef(\rainTexture, { |out = 0, densFactor = 1, hp=400, lp=6000, amp=0.2|
 
 // Toggle intruments
 ~layerOn = IdentityDictionary[
-	\Pad->true, \DarkPad->false, \Bass->false, \Drone->true,
-	\HarpArp->false, \GlassArp->false, \Bell->false,
-	\SeaTex->false, \RainTex->false, \VinylTex->true
+	\Pad -> false,
+	\DarkPad -> true,
+	\Bass -> false,
+	\Drone ->true,
+	\HarpArp -> true,
+	\GlassArp -> false,
+	\Bell -> false,
+	\SeaTex -> true,
+	\RainTex -> false,
+	\VinylTex -> false
 ];
+
 
 // Map your channel names → control buses
 ~channelBus = IdentityDictionary[
@@ -1976,31 +1996,61 @@ SynthDef(\rainTexture, { |out = 0, densFactor = 1, hp=400, lp=6000, amp=0.2|
 ];
 
 // Control-bus ramp (for faders/sends/master etc.)
-SynthDef(\kline, { |bus=0, start=0, end=1, dur=8, curve=0|
+SynthDef(\fade, { |bus, start = 0, end = 1, dur = 8, curve = -2|
 	var ctl = EnvGen.kr(Env([start, end], [dur], curve), doneAction:2);
 	Out.kr(bus, ctl);
 }).add;
 
 // Helper to fade any control bus
-~fade = { |bus, to=0.0, time=8.0, curve=0, from|
-	var start = from ?? { bus.getSynchronous };  // use current bus value by default
-	Synth(\kline, [\bus, bus, \start, start, \end, to, \dur, time, \curve, curve], target: ~masterGroup);
+~fadeSmart = { |bus, target=0.0, time=8.0|
+    var current = bus.getSynchronous;
+    var start;
+
+    if(current <= 0.001 and: { target > 0 }) {
+        // case 1: new instrument
+        start = 0.0;
+    } {
+        if(target <= 0.001) {
+            // case 2: fade out
+            start = current;
+        } {
+            // case 3: adjustment
+            start = current;
+        }
+    };
+
+    Synth(\fade, [\bus, bus, \start, start, \end, target, \dur, time, \curve, -2], target: ~masterGroup);
 };
 
-// Gradually change parameters
+~targetsToFades = { |targets, time=8|
+    if(targets.isNil) { ^nil };
+
+    targets.keysValuesDo { |k, v|
+        var bus = ~channelBus[k];
+        if(bus.notNil) {
+            ~fadeSmart.(bus, v, time);
+        } {
+            ("[targetsToFades] WARNING: No bus for " ++ k).postln;
+        };
+    };
+};
+
+// Gradually change high level parameters
 ~rampParam = { |key, to, dur=60, curve=\lin|
     var start = ~getParam.(key) ?? 0.5;
     var env   = Env([start, to], [dur], curve);
+	var mult = 10;
+	var steps = dur * mult;
 
-    ("[rampParam] Starting ramp for %: start=%, target=%, dur=%, curve=%"
-        .format(key, start, to, dur, curve)).postln;
+    ("[rampParam] Starting ramp for %: start=%, target=%, steps=%, curve=%"
+        .format(key, start, to, steps, curve)).postln;
 
     Task({
-        env.asSignal(dur).do { |val, i|
+        env.asSignal(dur * 10).do { |val, i|
             ~setParam.(key, val);  // safe bus update
-            ("    step %/% → % = %, mapped → %"
-                .format(i, dur, key, val.round(0.001), ~getMapped.(key) ?? "nil")).postln;
-            1.wait;
+            /*("    step %/% → % = %, mapped → %"
+                .format(i, steps, key, val.round(0.001), ~getMapped.(key) ?? "nil")).postln;*/
+			(1/mult).wait;
         };
 
         // final target
@@ -2010,40 +2060,92 @@ SynthDef(\kline, { |bus=0, start=0, end=1, dur=8, curve=0|
     }).start;
 };
 
-// Apply a scene
+~normalizeScene = { |scene|
+	var val, dict;
+    if(scene.isNil) { ^IdentityDictionary[] };
+
+    ("[normalizeScene] input class: " ++ scene.class).postln;
+
+    // Convert Event → IdentityDictionary
+    dict = if(scene.isKindOf(Event)) {
+        ("[normalizeScene] converting Event to IdentityDictionary").postln;
+        IdentityDictionary.newFrom(scene)
+    } {
+        scene
+    };
+
+    ("[normalizeScene] after Event conversion → " ++ dict.class).postln;
+
+    // Normalize fields
+    [\layersOn, \targets, \params, \fx].do { |key|
+        val = dict[key];
+        if(val.notNil) {
+            if(val.isKindOf(Event)) {
+                ("[normalizeScene] key " ++ key ++ " is Event, converting").postln;
+                dict[key] = IdentityDictionary.newFrom(val);
+            } {
+                if(val.isKindOf(Dictionary).not) {
+                    ("[normalizeScene] WARNING: key " ++ key ++ " is not a Dictionary, but " ++ val.class).warn;
+                };
+            };
+        };
+    };
+
+    ("[normalizeScene] output keys: " ++ dict.keys).postln;
+    dict;
+};
+
+// Apply a scene with smooth fades + param ramps
 ~enterScene = { |scene|
 	var allParams;
+
+    scene = ~normalizeScene.(scene);  // ensure proper format
     ("Entering scene: " ++ scene[\name]).postln;
 
+    // Scale / key (optional)
     if(scene[\key].notNil)   { ~setKey.(scene[\key][0], scene[\key][1]) };
     if(scene[\scale].notNil) { ~setScale.(scene[\scale]) };
 
-    if(scene[\layersOn].notNil) {
-        scene[\layersOn].keysValuesDo { |k, v| ~layerOn[k] = v };
+	// Update layers
+	if(scene[\layersOn].notNil) {
+		~layerOn.keysDo { |k|
+			~layerOn[k] = scene[\layersOn][k] ? false.asBoolean;
+		};
+		("[enterScene] Updated layerOn: " ++ ~layerOn).postln;
+	};
+
+	// Fade to target
+	if(scene[\targets].notNil) {
+		~targetsToFades.(scene[\targets], scene[\fadeTime] ? 12);
+	};
+
+    // unify fx + params
+    allParams = IdentityDictionary[];
+    if(scene[\params].notNil) {
+        allParams.putAll(scene[\params]);
+    };
+    if(scene[\fx].notNil) {
+        scene[\fx].keysValuesDo { |k,v|
+            var mappedKey = case
+            { k == \reverb    } { \reverb }
+            { k == \delay     } { \delay }
+            { k == \comp      } { \comp }
+            { k == \saturator } { \saturator }
+            { k == \fxMaster  } { \fxMaster }
+            { k }; // fallback
+            allParams[mappedKey] = v;
+        };
     };
 
-    ~targetsToFades.(scene[\targets] ? IdentityDictionary[], scene[\fadeTime] ? 12);
-
-    // unify fx + params into one dictionary and ramp them all
-	allParams = IdentityDictionary[];
-	if(scene[\params].notNil) { allParams.addAll(scene[\params]) };
-	if(scene[\fx].notNil) {
-		// rename FX keys to match your bus naming (optional)
-		scene[\fx].keysValuesDo { |k,v|
-			var mappedKey = case
-			{ k == \reverb    } { \reverb }
-			{ k == \delay     } { \delay }
-			{ k == \comp      } { \comp }
-			{ k == \saturator } { \saturator }
-			{ k == \fxMaster  } { \fxMaster }
-			{ k }; // fallback
-			allParams[mappedKey] = v;
-		};
-	};
+    if(allParams.notEmpty) {
+        allParams.keysValuesDo { |k,v|
+            ~rampParam.(k, v, scene[\paramTime] ? (scene[\fadeTime] ? 12));
+        };
+    };
 };
 )
 
-// --- Scenen (Presets) ---
+// --- Scenes (Presets) ---
 
 (
 // A compact, tasteful starting timeline (≈ 20–25 min depending on your ~dur map)
@@ -2051,15 +2153,15 @@ SynthDef(\kline, { |bus=0, start=0, end=1, dur=8, curve=0|
 	(
 		name: \intro, fadeTime: 16, paramTime: 40, dur: 4,
 		key: [\D, 3], scale: \yo,
-		layersOn: (SeaTex:true, VinylTex:false, RainTex:false, Drone:true, Pad:false, DarkPad:false, Bass:false, HarpArp:false, GlassArp:false, Bell:false),
-		targets: (SeaTex:0.35, VinylTex:0.25, Drone:0.12, Master:1.0, FXMaster:0.9, ReverbFX:0.8, DelayFX:0.15),
-		params: (warmth:0.35, brightness:0.35, density:0.18, variability:0.18, rhythmicity:0.2)
+		layersOn: (SeaTex:true, Drone:true),
+		targets: (SeaTex:1, Drone:1, Master:1.0, FXMaster:0.9, ReverbFX:0.8, DelayFX:0.30),
+		params: (warmth:0.25, brightness:0.35, density:0.2, variability:0.2, rhythmicity:0.2)
 	),
 
 	(
 		name: \firstPads, fadeTime: 20, paramTime: 60, dur: 8,
-		layersOn: (Pad:true, Drone:true, SeaTex:true, VinylTex:false, GlassArp:false, HarpArp:false, Bell:false, Bass:false, DarkPad:false, RainTex:false),
-		targets: (Pad:0.55, Drone:0.18, SeaTex:0.3, VinylTex:0.2, ReverbFX:0.85, DelayFX:0.25),
+		layersOn: (Pad:true, Drone:true, SeaTex:true),
+		targets: (Pad:0.55, Drone:0.18, SeaTex:0.3, VinylTex:0.0, Master:1.0, ReverbFX:0.85, DelayFX:0.25),
 		params: (warmth:0.5, brightness:0.45, density:0.25, variability:0.22, rhythmicity:0.25)
 	),
 
@@ -2067,33 +2169,34 @@ SynthDef(\kline, { |bus=0, start=0, end=1, dur=8, curve=0|
 		name: \shimmer, fadeTime: 18, paramTime: 60, dur: 6,
 		scale: \lydianDominant,
 		layersOn: (GlassArp:true, HarpArp:true, RainTex:true),
-		targets: (GlassArp:0.18, HarpArp:0.12, RainTex:0.22, DelayFX:0.45, ReverbFX:0.9),
+		targets: (GlassArp:0.18, HarpArp:0.12, RainTex:0.22, Master:1.0, DelayFX:0.45, ReverbFX:0.9),
 		params: (brightness:0.65, density:0.32, variability:0.35)
 	),
 
 	(
 		name: \ground, fadeTime: 22, paramTime: 70, dur: 12,
 		layersOn: (RainTex:true, Bass:true, DarkPad:true),
-		targets: (Bass:0.12, DarkPad:0.28, Pad:0.4, Drone:0.15, DelayFX:0.3, SaturatorFX:0.15),
+		targets: (Bass:0.5, DarkPad:0.28, Pad:0.4, Drone:0.15, Master:1.0, DelayFX:0.3, SaturatorFX:0.15),
 		params: (warmth:0.7, brightness:0.5, density:0.38, rhythmicity:0.35)
 	),
 
 	(
 		name: \punctuate, fadeTime: 12, paramTime: 30, dur: 6,
-		layersOn: (VinylTex:true, Bell:true, HarpArp:true, GlassArp:false),
-		targets: (Bell:0.14, HarpArp:0.1, DelayFX:0.35, ReverbFX:0.95),
+		layersOn: (VinylTex:true, Bell:true, HarpArp:true),
+		targets: (VinylTex:0.2, Bell:0.14, HarpArp:0.1, Master:1.0, DelayFX:0.35, ReverbFX:0.95),
 		params: (variability:0.28, density:0.3)
 	),
 
 	(
 		name: \exhale, fadeTime: 24, paramTime: 60, dur: 8,
 		scale: \inSen,
-		layersOn: (VinylTex:true, Bass:false, DarkPad:false, HarpArp:false, Bell:false, GlassArp:false),
-		targets: (Pad:0.25, Drone:0.1, RainTex:0.08, SeaTex:0.25, VinylTex:0.2, DelayFX:0.15, ReverbFX:0.8),
+		layersOn: (Pad:true, Drone:true, SeaTex:true, VinylTex:true),
+		targets: (Pad:0.25, Drone:0.1, RainTex:0.08, SeaTex:0.25, VinylTex:0.2, Master:1.0, DelayFX:0.15, ReverbFX:0.8),
 		params: (warmth:0.4, brightness:0.35, density:0.18, variability:0.15, rhythmicity:0.15)
 	)
 ];
 )
+
 
 
 // --- Control Engine ---
@@ -2132,7 +2235,7 @@ SynthDef(\kline, { |bus=0, start=0, end=1, dur=8, curve=0|
     \waveDepth,   Pfunc({ ~mapLin.(~parameters[\density], 0, 1, 0.1, 0.6) }),
     \waveRate,    Pfunc({ ~mapLin.(~parameters[\variability], 0, 1, 0.02, 0.08) }),
     \pan,         Pwhite(-1.0, 1.0),
-    \amp,         Pfunc({ ~getMapped.(\seaAmp) }),
+	\amp,         Pfunc({ ~getMapped.(\seaAmp) }),
 	\out,         ~seaBus
 );
 
@@ -2383,6 +2486,13 @@ Pdef(\ambgen,
 (
 ~startRoutine.(\conductor, {
     Routine({
+        // start ambgen if not running
+        if(Pdef(\ambgen).isPlaying.not) {
+            "Starting ambgen...".postln;
+            Pdef(\ambgen).play;
+        };
+
+        // cycle through scenes
         ~scenes.do { |sc|
             ~enterScene.(sc);
             (sc[\dur] * (~getMapped.(\dur) ? 8)).wait;
@@ -2392,6 +2502,9 @@ Pdef(\ambgen,
 )
 
 ~stopRoutine.(\conductor);
+
+~seaCtrl.get({ |val| ("SeaCtrl bus = " ++ val).postln });
+
 
 // Routine to change scales
 (
@@ -2462,6 +2575,8 @@ Pdef(\ambgen,
 })
 )
 
+~stopRoutine.(\scaleChanger);
+
 
 // Routine for instrument set selection with smooth fades
 (
@@ -2472,8 +2587,8 @@ Pdef(\ambgen,
 		var arps       = [\HarpArp, \GlassArp];
 		var others     = [\Drone, \Bass, \Bell]; // can be combined freely
 
-		var active, tex, pad, arp, nInstruments, cycleWait, extras, fades;
-		var fadeTime = 12; // seconds to fade in/out
+		var active, tex, pad, arp, nInstruments, varChance, cycleWait, extras, fades;
+		var fadeTime = ~mapLin.(~parameters[\rhythmicity], 0, 1, 4, 12); // seconds to fade in/out
 
 		loop {
 			// 1. Always one texture
@@ -2486,7 +2601,13 @@ Pdef(\ambgen,
 			arp = (1.rand == 0).if { arps.choose } { nil };
 
 			// 4. Decide total instrument count (between 2 and 6)
-			nInstruments = rrand(2, 6);
+			nInstruments = ~mapLin.(~parameters[\density], 0, 1, 2, 6).round.asInteger;
+			varChance = ~mapLin.(~parameters[\variability], 0, 1, 0.0, 0.6);
+
+			// Randomly add or subtract 1 based on variability chance
+			if(varChance.coin) {
+				nInstruments = (nInstruments + ([-1, 1].choose)).clip(2, 6);
+			};
 
 			// 5. Build active set
 			active = [tex];
@@ -2500,7 +2621,7 @@ Pdef(\ambgen,
 			);
 			active = active ++ extras;
 
-			// --- FADE LOGIC ---
+			// Fades
 			fades = IdentityDictionary[];
 
 			// fade in chosen instruments
@@ -2529,6 +2650,8 @@ Pdef(\ambgen,
 })
 )
 
+~stopRoutine.(\instrumentChanger);
+
 
 // --- Usage & Checks ---
 
@@ -2552,10 +2675,10 @@ Pdef(\ambgen,
 ~setParam.(\warmth, 0.8);
 
 // Brightness: 0 (dark/muffled) → 1 (bright/open)
-~setParam.(\brightness, 0.7);
+~setParam.(\brightness, 0.3);
 
 // Density: 0 (few voices/open) → 1 (many voices/clustered)
-~setParam.(\density, 0.5);
+~setParam.(\density, 0.2);
 
 // Variability: 0 (slow/static) → 1 (fast/changing)
 ~setParam.(\variability, 0.3);
