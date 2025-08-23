@@ -2178,37 +2178,37 @@ SynthDef(\fade, { |bus, start = 0, end = 1, dur = 8|
 	(
 		name: \firstPads, fadeTime: 6, paramTime: 60, dur: 8,
 		layersOn: (DarkPad:true, Drone:true, SeaTex:true),
-		targets: (DarkPad:1.0, Drone:0.8, SeaTex:0.8, VinylTex:0.0, Master:1.0, ReverbFX:0.50, DelayFX:0.30),
-		params: (warmth:0.6, brightness:0.45, density:0.3, variability:0.3, rhythmicity:0.5)
+		targets: (DarkPad:1.0, Drone:0.8, SeaTex:0.8, Master:1.0, ReverbFX:0.50, DelayFX:0.30),
+		params: (warmth:0.3, brightness:0.45, density:0.3, variability:0.3, rhythmicity:0.5)
 	),
 
 	(
 		name: \shimmer, fadeTime: 6, paramTime: 60, dur: 6,
 		scale: \lydianDominant,
 		layersOn: (GlassArp:true, Pad:true, RainTex:true, SeaTex:false),
-		targets: (GlassArp:1.0, SeaTex:0, RainTex:1.0, Master:1.0, DelayFX:0.35, ReverbFX:0.7),
-		params: (brightness:0.6, density:0.3, variability:0.35, wamth:0.3, rhythmicity:0.3)
+		targets: (GlassArp:1.0, Pad:0.7, RainTex:1, SeaTex:0, Master:1.0, DelayFX:0.4, ReverbFX:0.7),
+		params: (brightness:0.6, density:0.3, variability:0.35, wamth:0.8, rhythmicity:0.3)
 	),
 
 	(
 		name: \ground, fadeTime: 6, paramTime: 70, dur: 12,
-		layersOn: (Bass:true, DarkPad:true),
-		targets: (Bass:0.6, DarkPad:1.0, Pad:1.0, Master:1.0, DelayFX:0.25, SaturatorFX:0.2),
-		params: (warmth:0.8, brightness:0.5, density:0.38, rhythmicity:0.7)
+		layersOn: (Bass:true, DarkPad:true, GlassArp:false, Pad:false, RainTex:true),
+		targets: (Bass:0.6, DarkPad:1.0, GlassArp:0, Pad:0, RainTex:0.6, Master:1.0, DelayFX:0.25, SaturatorFX:0.5),
+		params: (warmth:0.5, brightness:0.5, density:0.38, rhythmicity:0.7)
 	),
 
 	(
 		name: \punctuate, fadeTime: 3, paramTime: 30, dur: 6,
-		layersOn: (VinylTex:true, Bell:true, HarpArp:true),
-		targets: (VinylTex:1.0, Bell:1.0, HarpArp:1.0, Master:1.0, DelayFX:0.3, ReverbFX:0.65),
-		params: (variability:0.3, density:0.3, rhythmicity:0.2)
+		layersOn: (VinylTex:true, RainTex:false, Bell:true, HarpArp:true),
+		targets: (Bass:0, DarkPad:0, RainTex:0, VinylTex:1.0, Bell:1.0, HarpArp:1.0, Master:1.0, DelayFX:0.5, ReverbFX:0.3),
+		params: (variability:0.3, density:0.3, rhythmicity:0.2, warmth:0.7)
 	),
 
 	(
 		name: \exhale, fadeTime: 8, paramTime: 60, dur: 8,
 		scale: \inSen,
-		layersOn: (Pad:true, Drone:true, SeaTex:true, VinylTex:true),
-		targets: (Pad:1.0, Drone:1.0, RainTex:1.0, SeaTex:1.0, VinylTex:1.0, Master:1.0, DelayFX:0.2, ReverbFX:0.6),
+		layersOn: (Pad:true, Drone:true, Bass:true, VinylTex:true),
+		targets: (Bass:0.5, Pad:1.0, Drone:1.0, RainTex:0, VinylTex:1.0, Master:1.0, DelayFX:0.2, ReverbFX:0.8),
 		params: (warmth:0.4, brightness:0.35, density:0.2, variability:0.15)
 	)
 ];
@@ -2304,6 +2304,12 @@ Pdef(\ambgen,
             chord = ~nextChord.();
             dur   = ~getMapped.(\dur);
             durations = ~genDurations.(dur);
+
+			// trigger scene fade here if a new scene is pending
+			if(~nextScene.notNil) {
+				~enterScene.(~nextScene);
+				~nextScene = nil;
+			};
 
             // Stop & clear previous synths
             padSynths.do { |s| s.set(\gate, 0) };      padSynths.clear;
@@ -2510,7 +2516,8 @@ Pdef(\ambgen,
 
         // cycle through scenes
         ~scenes.do { |sc|
-            ~enterScene.(sc);
+            ("[Conductor] Queuing scene: " ++ sc[\name]).postln;
+            ~nextScene = sc;   // only mark it, don't enter yet
             (sc[\dur] * (~getMapped.(\dur) ? 8)).wait;
         };
     })
