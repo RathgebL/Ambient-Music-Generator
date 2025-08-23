@@ -37,7 +37,7 @@ SynthDef(\fader, { |inBus, outBus, ctrlBus|
     var sig = In.ar(inBus, 2) * In.kr(ctrlBus, 1);
 
     // print RMS amplitude of each channel every 0.1 sec
-	Poll.kr(Impulse.kr(0.2), Amplitude.kr(sig[0]), label: "fader L");
+	// Poll.kr(Impulse.kr(0.2), Amplitude.kr(sig[0]), label: "fader L");
 	// Poll.kr(Impulse.kr(10), Amplitude.kr(sig[1]), label: "fader R");
 
     Out.ar(outBus, sig);
@@ -48,7 +48,7 @@ SynthDef(\groupFader, { |inBus, outBus, ctrlBus|
     var sig = In.ar(inBus, 2) * In.kr(ctrlBus, 1);
 
     // print RMS amplitude of each channel every 0.1 sec
-	Poll.kr(Impulse.kr(0.2), Amplitude.kr(sig[0]), label: "group fader L");
+	// Poll.kr(Impulse.kr(0.2), Amplitude.kr(sig[0]), label: "group fader L");
 	// Poll.kr(Impulse.kr(10), Amplitude.kr(sig[1]), label: "group fader R");
 
     Out.ar(outBus, sig);
@@ -59,7 +59,7 @@ SynthDef(\fxGroupFader, { |inBus, outBus, ctrlBus|
     var sig = In.ar(inBus, 2) * In.kr(ctrlBus, 1);
 
     // print RMS amplitude of each channel every 0.1 sec
-	Poll.kr(Impulse.kr(0.2), Amplitude.kr(sig[0]), label: "FX group fader L");
+	// Poll.kr(Impulse.kr(0.2), Amplitude.kr(sig[0]), label: "FX group fader L");
 	// Poll.kr(Impulse.kr(10), Amplitude.kr(sig[1]), label: "FX group fader R");
 
     Out.ar(outBus, sig);
@@ -69,7 +69,7 @@ SynthDef(\drySend, { |inBus, outBus, ctrlBus|
     var sig = In.ar(inBus, 2) * In.kr(ctrlBus, 1);
 
     // print RMS amplitude of each channel every 0.1 sec
-	Poll.kr(Impulse.kr(0.2), Amplitude.kr(sig[0]), label: "dry send L");
+	// Poll.kr(Impulse.kr(0.2), Amplitude.kr(sig[0]), label: "dry send L");
 	// Poll.kr(Impulse.kr(10), Amplitude.kr(sig[1]), label: "dry send R");
 
     Out.ar(outBus, sig);
@@ -79,7 +79,7 @@ SynthDef(\drySend, { |inBus, outBus, ctrlBus|
 SynthDef(\multiSend, { |inBus, revBus, compBus, delBus, satBus, amp=1|
     var sig = In.ar(inBus, 2) * amp;
 
-	Poll.kr(Impulse.kr(0.2), Amplitude.kr(sig[0]), label: "multi send tap L");
+	// Poll.kr(Impulse.kr(0.2), Amplitude.kr(sig[0]), label: "multi send tap L");
 	// Poll.kr(Impulse.kr(10), Amplitude.kr(sig[1]), label: "multi send tap R");
 
     Out.ar(revBus, sig);
@@ -94,7 +94,7 @@ SynthDef(\fxReverb, { |inBus=0, outBus=0, ctrlBus, room=0.9, damp=0.5, mix=1.0|
 	in = In.ar(inBus, 2) * In.kr(ctrlBus, 1);
     sig = FreeVerb2.ar(in[0], in[1], mix, room, damp); // always wet
 
-	Poll.kr(Impulse.kr(0.2), Amplitude.kr(sig[0]), label: "rev tap L");
+	// Poll.kr(Impulse.kr(0.2), Amplitude.kr(sig[0]), label: "rev tap L");
 	// Poll.kr(Impulse.kr(10), Amplitude.kr(sig[1]), label: "rev tap R");
 
 	Out.ar(outBus, sig);
@@ -140,8 +140,9 @@ SynthDef(\masterFader, { |inBus=0, outBus=0, ctrlBus|
     sig = FreeVerb2.ar(sig[0], sig[1], mix: 0.1, room: 0.7, damp: 0.5);
 	sig = Limiter.ar(sig, 0.9);
 
-	Poll.kr(Impulse.kr(1), Amplitude.kr(sig[0]), label: "Master tap L");
+	// Poll.kr(Impulse.kr(1), Amplitude.kr(sig[0]), label: "Master tap L");
 	// Poll.kr(Impulse.kr(1), Amplitude.kr(sig[1]), label: "Master tap R");
+	Poll.kr(Impulse.kr(0.05), Amplitude.kr(sig[1]), label: "Mixer active");
 
 	Out.ar(outBus, sig);
 }).add;
@@ -2164,55 +2165,54 @@ SynthDef(\fade, { |bus, start = 0, end = 1, dur = 8|
 // --- Scenes (Presets) ---
 
 (
-// A compact, tasteful starting timeline (≈ 20–25 min depending on your ~dur map)
+// Revised compact timeline (≈ 20–25 min)
 ~scenes = [
 	(
 		name: \intro, fadeTime: 8, paramTime: 40, dur: 4,
 		key: [\D, 3], scale: \yo,
-		layersOn: (SeaTex:true, Drone:true),
-		targets: (SeaTex:1.0, Drone:1.0, Master:1.0, FXMaster:0.9, ReverbFX:0.8, DelayFX:0.3),
-		params: (warmth:0.25, brightness:0.35, density:0.2, variability:0.2, rhythmicity:0.2)
+		layersOn: (SeaTex:true, Drone:true, Pad:false, DarkPad:false, Bass:false, Bell:false, HarpArp:false, GlassArp:false, Bell:false, RainTex:false, VinylTex:false),
+		targets: (SeaTex:1.0, Drone:1.0, DarkPad:0, Pad:0, Bass:0, Bell:0, HarpArp:0, GlassArp:0, Bell:0, RainTex:0, VinylTex:0, Master:1.0, FXMaster:0.85, ReverbFX:0.6, DelayFX:0.2),
+		params: (warmth:0.4, brightness:0.35, density:0.2, variability:0.2, rhythmicity:0.3)
 	),
 
 	(
-		name: \firstPads, fadeTime: 4, paramTime: 60, dur: 8,
-		layersOn: (Pad:true, Drone:true, SeaTex:true),
-		targets: (Pad:0.55, Drone:0.18, SeaTex:0.3, VinylTex:0.0, Master:1.0, ReverbFX:0.85, DelayFX:0.25),
-		params: (warmth:0.5, brightness:0.45, density:0.25, variability:0.22, rhythmicity:0.25)
+		name: \firstPads, fadeTime: 6, paramTime: 60, dur: 8,
+		layersOn: (DarkPad:true, Drone:true, SeaTex:true),
+		targets: (DarkPad:1.0, Drone:0.8, SeaTex:0.8, VinylTex:0.0, Master:1.0, ReverbFX:0.50, DelayFX:0.30),
+		params: (warmth:0.6, brightness:0.45, density:0.3, variability:0.3, rhythmicity:0.5)
 	),
 
 	(
-		name: \shimmer, fadeTime: 4, paramTime: 60, dur: 6,
+		name: \shimmer, fadeTime: 6, paramTime: 60, dur: 6,
 		scale: \lydianDominant,
-		layersOn: (GlassArp:true, HarpArp:true, RainTex:true),
-		targets: (GlassArp:0.18, HarpArp:0.12, RainTex:0.22, Master:1.0, DelayFX:0.45, ReverbFX:0.9),
-		params: (brightness:0.65, density:0.32, variability:0.35)
+		layersOn: (GlassArp:true, Pad:true, RainTex:true, SeaTex:false),
+		targets: (GlassArp:1.0, SeaTex:0, RainTex:1.0, Master:1.0, DelayFX:0.35, ReverbFX:0.7),
+		params: (brightness:0.6, density:0.3, variability:0.35, wamth:0.3, rhythmicity:0.3)
 	),
 
 	(
 		name: \ground, fadeTime: 6, paramTime: 70, dur: 12,
-		layersOn: (RainTex:true, Bass:true, DarkPad:true),
-		targets: (Bass:0.5, DarkPad:0.28, Pad:0.4, Drone:0.15, Master:1.0, DelayFX:0.3, SaturatorFX:0.15),
-		params: (warmth:0.7, brightness:0.5, density:0.38, rhythmicity:0.35)
+		layersOn: (Bass:true, DarkPad:true),
+		targets: (Bass:0.6, DarkPad:1.0, Pad:1.0, Master:1.0, DelayFX:0.25, SaturatorFX:0.2),
+		params: (warmth:0.8, brightness:0.5, density:0.38, rhythmicity:0.7)
 	),
 
 	(
-		name: \punctuate, fadeTime: 2, paramTime: 30, dur: 6,
+		name: \punctuate, fadeTime: 3, paramTime: 30, dur: 6,
 		layersOn: (VinylTex:true, Bell:true, HarpArp:true),
-		targets: (VinylTex:0.2, Bell:0.14, HarpArp:0.1, Master:1.0, DelayFX:0.35, ReverbFX:0.95),
-		params: (variability:0.28, density:0.3)
+		targets: (VinylTex:1.0, Bell:1.0, HarpArp:1.0, Master:1.0, DelayFX:0.3, ReverbFX:0.65),
+		params: (variability:0.3, density:0.3, rhythmicity:0.2)
 	),
 
 	(
 		name: \exhale, fadeTime: 8, paramTime: 60, dur: 8,
 		scale: \inSen,
 		layersOn: (Pad:true, Drone:true, SeaTex:true, VinylTex:true),
-		targets: (Pad:0.25, Drone:0.1, RainTex:0.08, SeaTex:0.25, VinylTex:0.2, Master:1.0, DelayFX:0.15, ReverbFX:0.8),
-		params: (warmth:0.4, brightness:0.35, density:0.18, variability:0.15, rhythmicity:0.15)
+		targets: (Pad:1.0, Drone:1.0, RainTex:1.0, SeaTex:1.0, VinylTex:1.0, Master:1.0, DelayFX:0.2, ReverbFX:0.6),
+		params: (warmth:0.4, brightness:0.35, density:0.2, variability:0.15)
 	)
 ];
 )
-
 
 
 // --- Control Engine ---
