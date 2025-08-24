@@ -987,7 +987,7 @@ rhythmicity from fluid/free to rhythmic/structured -> pulse emphasis
 	noiseAmp:     { ~mapExp.(~parameters[\density],     0, 1, 0.5, 1) },
 	seaAmp:       { ~mapExp.(~parameters[\density],     0, 1, 0.1, 0.3) },
 	rainAmp:      { ~mapExp.(~parameters[\density],     0, 1, 0.5, 1) },
-	vinylAmp:     { ~mapExp.(~parameters[\density],     0, 1, 0.1, 0.2) },
+	vinylAmp:     { ~mapExp.(~parameters[\density],     0, 1, 0.1, 0.3) },
 
 	numVoices: {
 		var raw = ~mapLin.(~parameters[\density], 0, 1, 1, 9).round.asInteger;
@@ -1930,7 +1930,7 @@ rhythmicity from fluid/free to rhythmic/structured -> pulse emphasis
 	\GlassArp -> false,
 	\Bell -> false,
 	\SeaTex -> true,
-	\RainTex -> false,
+	\RainTex -> true,
 	\VinylTex -> false
 ];
 
@@ -2165,47 +2165,47 @@ rhythmicity from fluid/free to rhythmic/structured -> pulse emphasis
 
 ~scores = [
 	(
-		name: \intro, fadeTime: 8, paramTime: 40, dur: 4,
+		name: \intro, fadeTime: 10, paramTime: 40, dur: 4,
 		key: [\D, 3], scale: \yo,
-		layersOn: (SeaTex:true, Drone:true, Pad:false, DarkPad:false, Bass:false, HarpArp:false, GlassArp:false, Bell:false, RainTex:false, VinylTex:false),
-		targets: (SeaTex:1.0, Drone:1.0, DarkPad:0, Pad:0, Bass:0, Bell:0, HarpArp:0, GlassArp:0, Bell:0, RainTex:0, VinylTex:0, Master:1.0, FXMaster:0.85, ReverbFX:0.6, DelayFX:0.2),
+		layersOn: (RainTex:true, SeaTex:true, Drone:true, Pad:false, DarkPad:false, Bass:false, HarpArp:false, GlassArp:false, Bell:false, RainTex:false, VinylTex:false),
+		targets: (RainTex:1, SeaTex:1.0, Drone:1.0, DarkPad:0, Pad:0, Bass:0, Bell:0, HarpArp:0, GlassArp:0, Bell:0, VinylTex:0, Master:1.0, FXMaster:0.85, ReverbFX:0.6, DelayFX:0.2),
 		params: (warmth:0.4, brightness:0.35, density:0.2, variability:0.2, rhythmicity:0.3)
 	),
 
 	(
-		name: \firstPads, fadeTime: 6, paramTime: 60, dur: 8,
+		name: \firstPads, fadeTime: 12, paramTime: 60, dur: 8,
 		layersOn: (DarkPad:true, Drone:true, SeaTex:true),
-		targets: (DarkPad:1.0, Drone:0.8, SeaTex:0.8, Master:1.0, ReverbFX:0.50, DelayFX:0.30),
+		targets: (DarkPad:1.0, Drone:0.7, SeaTex:0.8, Master:1.0, ReverbFX:0.50, DelayFX:0.30),
 		params: (warmth:0.3, brightness:0.45, density:0.3, variability:0.3, rhythmicity:0.5)
 	),
 
 	(
-		name: \shimmer, fadeTime: 6, paramTime: 60, dur: 6,
+		name: \shimmer, fadeTime: 10, paramTime: 60, dur: 6,
 		scale: \lydianDominant,
-		layersOn: (GlassArp:true, Pad:true, RainTex:true, SeaTex:false),
-		targets: (GlassArp:1.0, Pad:0.7, RainTex:1, SeaTex:0, Master:1.0, DelayFX:0.4, ReverbFX:0.7),
+		layersOn: (GlassArp:true, Pad:true, RainTex:true, DarkPad:true, Drone:true, SeaTex:true),
+		targets: (GlassArp:1.0, Pad:0.7, RainTex:1, SeaTex:0, DarkPad:0, Drone:0, DelayFX:0.4, ReverbFX:0.7),
 		params: (brightness:0.6, density:0.3, variability:0.35, warmth:0.8, rhythmicity:0.3)
 	),
 
 	(
-		name: \ground, fadeTime: 6, paramTime: 70, dur: 12,
-		layersOn: (Bass:true, DarkPad:true, GlassArp:false, Pad:false, RainTex:true),
-		targets: (Bass:0.6, DarkPad:1.0, GlassArp:0, Pad:0, RainTex:0.6, Master:1.0, DelayFX:0.25, SaturatorFX:0.5),
+		name: \ground, fadeTime: 16, paramTime: 70, dur: 12,
+		layersOn: (Bass:true, DarkPad:true, RainTex:true, GlassArp:true, Pad:true, Drone:false, SeaTex:false),
+		targets: (Bass:0.6, DarkPad:1.0, RainTex:0.6, GlassArp:0, Pad:0, Master:1.0, DelayFX:0.1, SaturatorFX:0.5),
 		params: (warmth:0.5, brightness:0.5, density:0.38, rhythmicity:0.7)
 	),
 
 	(
-		name: \punctuate, fadeTime: 3, paramTime: 30, dur: 6,
-		layersOn: (VinylTex:true, RainTex:false, Bell:true, HarpArp:true),
-		targets: (Bass:0, DarkPad:0, RainTex:0, VinylTex:1.0, Bell:1.0, HarpArp:1.0, Master:1.0, DelayFX:0.5, ReverbFX:0.3),
+		name: \punctuate, fadeTime: 6, paramTime: 30, dur: 6,
+		layersOn: (Bell:true, HarpArp:true, VinylTex:true, RainTex:true, Bass:true, DarkPad:true),
+		targets: (VinylTex:1.0, Bell:0.7, HarpArp:1.0, Bass:0, DarkPad:0, RainTex:0, Master:1.0, ReverbFX:0.3),
 		params: (variability:0.3, density:0.3, rhythmicity:0.2, warmth:0.7)
 	),
 
 	(
-		name: \exhale, fadeTime: 8, paramTime: 60, dur: 8,
+		name: \exhale, fadeTime: 12, paramTime: 60, dur: 8,
 		scale: \inSen,
-		layersOn: (Pad:true, Drone:true, Bass:true, VinylTex:true),
-		targets: (Bass:0.5, Pad:1.0, Drone:1.0, RainTex:0, VinylTex:1.0, Master:1.0, DelayFX:0.2, ReverbFX:0.8),
+		layersOn: (Pad:true, Drone:true, Bass:true, VinylTex:true, RainTex:false, Bass:false, DarkPad:false),
+		targets: (Bass:0.5, Pad:1.0, Drone:1.0, Master:1.0, DelayFX:0.2, ReverbFX:0.8),
 		params: (warmth:0.4, brightness:0.35, density:0.2, variability:0.15)
 	)
 ];
