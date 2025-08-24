@@ -582,28 +582,20 @@ SynthDef(\fade, { |bus, start = 0, end = 1, dur = 8, curve = -0.5|
 )
 
 
-// ====== Engines ======
+// ====== Buses ======
+
+~resetMixer.();
+~busesAllocated = false;
+~allocBuses.();
 
 (
-// --- Mixing Engine ---
-
-~startMixingEngine = {
-	// Top-level groups
-	~mixerGroup        = Group.head(s);
-	~sourcesGroup      = Group.head(~mixerGroup);        // instrument synths
-	~fadersGroup       = Group.after(~sourcesGroup);     // instrument faders
-	~groupFadersGroup  = Group.after(~fadersGroup);      // group faders
-	~dryGroup          = Group.after(~groupFadersGroup); // sends to master
-	~sendsGroup        = Group.after(~dryGroup);         // sends to FX
-	~fxsGroup          = Group.after(~sendsGroup);       // FX processors
-	~fxMaster          = Group.after(~fxsGroup);         // FX master
-	~master            = Group.after(~fxMaster);         // final master fader
+~allocBuses = {
+    if(~busesAllocated.not) {
+        "Allocating buses...".postln;
 
 	// Audio Buses
-	// Master bus
 	~masterBus       = Bus.audio(s, 2);
 
-	// Instrument buses
 	~padBus          = Bus.audio(s, 2);
 	~darkPadBus      = Bus.audio(s, 2);
 	~bassBus         = Bus.audio(s, 2);
@@ -615,13 +607,11 @@ SynthDef(\fade, { |bus, start = 0, end = 1, dur = 8, curve = -0.5|
 	~rainBus         = Bus.audio(s, 2);
 	~vinylBus        = Bus.audio(s, 2);
 
-	// FX buses
 	~revBus          = Bus.audio(s, 2);
 	~compBus         = Bus.audio(s, 2);
 	~delBus          = Bus.audio(s, 2);
 	~satBus          = Bus.audio(s, 2);
 
-	// Group buses
 	~padGroupBus     = Bus.audio(s, 2);
 	~bassGroupBus    = Bus.audio(s, 2);
 	~droneGroupBus   = Bus.audio(s, 2);
@@ -630,7 +620,6 @@ SynthDef(\fade, { |bus, start = 0, end = 1, dur = 8, curve = -0.5|
 	~texGroupBus     = Bus.audio(s, 2);
 	~fxGroup         = Bus.audio(s, 2);
 
-	// Dry sends
 	~padDryBus       = Bus.audio(s, 2);
 	~bassDryBus      = Bus.audio(s, 2);
 	~droneDryBus     = Bus.audio(s, 2);
@@ -638,11 +627,9 @@ SynthDef(\fade, { |bus, start = 0, end = 1, dur = 8, curve = -0.5|
 	~arpDryBus       = Bus.audio(s, 2);
 	~texDryBus       = Bus.audio(s, 2);
 
-	// Control buses
-	// Master control
+	// Control Buses
 	~masterCtrl      = Bus.control(s, 1).set(1);
 
-	// Instrument control
 	~padCtrl         = Bus.control(s, 1).set(0.5);
 	~darkPadCtrl     = Bus.control(s, 1).set(0.5);
 	~bassCtrl        = Bus.control(s, 1).set(0.5);
@@ -654,13 +641,11 @@ SynthDef(\fade, { |bus, start = 0, end = 1, dur = 8, curve = -0.5|
 	~rainCtrl        = Bus.control(s, 1).set(0.5);
 	~vinylCtrl       = Bus.control(s, 1).set(0.5);
 
-	// FX control
 	~revCtrl         = Bus.control(s, 1).set(1);
 	~compCtrl        = Bus.control(s, 1).set(1);
 	~delCtrl         = Bus.control(s, 1).set(1);
 	~satCtrl         = Bus.control(s, 1).set(1);
 
-	// Groups control
 	~padGroupCtrl    = Bus.control(s, 1).set(1);
 	~bassGroupCtrl   = Bus.control(s, 1).set(1);
 	~droneGroupCtrl  = Bus.control(s, 1).set(1);
@@ -668,15 +653,35 @@ SynthDef(\fade, { |bus, start = 0, end = 1, dur = 8, curve = -0.5|
 	~arpGroupCtrl    = Bus.control(s, 1).set(1);
 	~texGroupCtrl    = Bus.control(s, 1).set(1);
 	~fxGroupCtrl     = Bus.control(s, 1).set(1);
-	~padDryCtrl      = Bus.control(s, 1).set(1);
 
-	// Dry control busses
 	~padDryCtrl      = Bus.control(s, 1).set(1);
 	~bassDryCtrl     = Bus.control(s, 1).set(1);
 	~droneDryCtrl    = Bus.control(s, 1).set(1);
 	~bellDryCtrl     = Bus.control(s, 1).set(1);
 	~arpDryCtrl      = Bus.control(s, 1).set(1);
 	~texDryCtrl      = Bus.control(s, 1).set(1);
+
+	~busesAllocated = true; // mark as done
+    } {
+        "Buses already allocated, skipping.".postln;
+    };
+};
+
+
+// ====== Engines ======
+
+// --- Start mixing engine (groups + faders) ---
+~startMixingEngine = {
+	// Groups
+	~mixerGroup        = Group.head(s);
+	~sourcesGroup      = Group.head(~mixerGroup);
+	~fadersGroup       = Group.after(~sourcesGroup);
+	~groupFadersGroup  = Group.after(~fadersGroup);
+	~dryGroup          = Group.after(~groupFadersGroup);
+	~sendsGroup        = Group.after(~dryGroup);
+	~fxsGroup          = Group.after(~sendsGroup);
+	~fxMaster          = Group.after(~fxsGroup);
+	~master            = Group.after(~fxMaster);
 
 	// Instrument faders
 	~padFader        = Synth(\fader,       [\inBus, ~padBus,        \outBus, ~padGroupBus,   \ctrlBus, ~padCtrl],        target: ~fadersGroup);
@@ -742,7 +747,7 @@ SynthDef(\fade, { |bus, start = 0, end = 1, dur = 8, curve = -0.5|
 	colMaster     = Color(1, 0.6, 0.2);    // orange
 
 	// Channel definitions (map to control buses)
-	channels = [
+	~channels = channels = [
 		// Instruments
 		(name: \Pad,         color: colInstrument, type: \instrument, ctrlBus: ~padCtrl),
 		(name: \DarkPad,     color: colInstrument, type: \instrument, ctrlBus: ~darkPadCtrl),
@@ -855,9 +860,17 @@ SynthDef(\fade, { |bus, start = 0, end = 1, dur = 8, curve = -0.5|
 	if(~guiUpdater.notNil and: { ~guiUpdater.isPlaying }) {
 		~guiUpdater.stop;
 	};
+};
+
+// --- GUI Updater ---
+~startGuiUpdater = {
+	if(~guiUpdater.notNil and: { ~guiUpdater.isPlaying }) {
+		~guiUpdater.stop;
+	};
 
 	~guiUpdater = Routine({
 		loop {
+			var channels = ~channels;
 			channels.do { |c|
 				if(c[\ctrlBus].notNil and: { c[\slider].notNil }) {
 					c[\ctrlBus].get { |val|
@@ -876,8 +889,9 @@ SynthDef(\fade, { |bus, start = 0, end = 1, dur = 8, curve = -0.5|
 		};
 	}).play(AppClock);
 
-	"[MixerGUI] Built & updater started".postln;
+	"[GUIUpdater] started".postln;
 };
+
 
 
 // --- Parameter Mapping Engine ---
@@ -2237,7 +2251,6 @@ rhythmicity from fluid/free to rhythmic/structured -> pulse emphasis
 };
 
 
-
 // Generator
 Pdef(\ambgen,
 	Pspawner { |sp|
@@ -2465,6 +2478,7 @@ Pdef(\ambgen,
 		//  0. Start mixer engine
 		if(~startMixingEngine.notNil) {
 			~startMixingEngine.();
+			s.sync;
 			">>> Mixing engine started".postln;
 		};
 
@@ -2476,6 +2490,10 @@ Pdef(\ambgen,
 			}.defer;  // run whole block on AppClock
 		};
 
+		0.5.wait;
+
+		~startGuiUpdater.();
+
 		// 2. Start the patterns
 		if(~makePatterns.notNil) {
 			~makePatterns.();
@@ -2484,7 +2502,7 @@ Pdef(\ambgen,
 
 		// 3. start ambgen if not running
 		if(Pdef(\ambgen).isPlaying.not) {
-			">>> Starting ambgen".postln;
+			">>> Starting Ambient Music Generator".postln;
 			Pdef(\ambgen).play;
 		};
 
@@ -2499,6 +2517,9 @@ Pdef(\ambgen,
 )
 
 ~stopRoutine.(\conductor);
+
+~droneCtrl.inspect;
+
 
 
 // --- FreePlayer to play improvised ambient music (with automatic scale and instrument changes)
