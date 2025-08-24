@@ -2103,80 +2103,142 @@ rhythmicity from fluid/free to rhythmic/structured -> pulse emphasis
 		};
 	};
 };
+
+
+// --- Scores (Presets) ---
+
+~scores = [
+	(
+		name: \intro, fadeTime: 8, paramTime: 40, dur: 4,
+		key: [\D, 3], scale: \yo,
+		layersOn: (SeaTex:true, Drone:true, Pad:false, DarkPad:false, Bass:false, HarpArp:false, GlassArp:false, Bell:false, RainTex:false, VinylTex:false),
+		targets: (SeaTex:1.0, Drone:1.0, DarkPad:0, Pad:0, Bass:0, Bell:0, HarpArp:0, GlassArp:0, Bell:0, RainTex:0, VinylTex:0, Master:1.0, FXMaster:0.85, ReverbFX:0.6, DelayFX:0.2),
+		params: (warmth:0.4, brightness:0.35, density:0.2, variability:0.2, rhythmicity:0.3)
+	),
+
+	(
+		name: \firstPads, fadeTime: 6, paramTime: 60, dur: 8,
+		layersOn: (DarkPad:true, Drone:true, SeaTex:true),
+		targets: (DarkPad:1.0, Drone:0.8, SeaTex:0.8, Master:1.0, ReverbFX:0.50, DelayFX:0.30),
+		params: (warmth:0.3, brightness:0.45, density:0.3, variability:0.3, rhythmicity:0.5)
+	),
+
+	(
+		name: \shimmer, fadeTime: 6, paramTime: 60, dur: 6,
+		scale: \lydianDominant,
+		layersOn: (GlassArp:true, Pad:true, RainTex:true, SeaTex:false),
+		targets: (GlassArp:1.0, Pad:0.7, RainTex:1, SeaTex:0, Master:1.0, DelayFX:0.4, ReverbFX:0.7),
+		params: (brightness:0.6, density:0.3, variability:0.35, warmth:0.8, rhythmicity:0.3)
+	),
+
+	(
+		name: \ground, fadeTime: 6, paramTime: 70, dur: 12,
+		layersOn: (Bass:true, DarkPad:true, GlassArp:false, Pad:false, RainTex:true),
+		targets: (Bass:0.6, DarkPad:1.0, GlassArp:0, Pad:0, RainTex:0.6, Master:1.0, DelayFX:0.25, SaturatorFX:0.5),
+		params: (warmth:0.5, brightness:0.5, density:0.38, rhythmicity:0.7)
+	),
+
+	(
+		name: \punctuate, fadeTime: 3, paramTime: 30, dur: 6,
+		layersOn: (VinylTex:true, RainTex:false, Bell:true, HarpArp:true),
+		targets: (Bass:0, DarkPad:0, RainTex:0, VinylTex:1.0, Bell:1.0, HarpArp:1.0, Master:1.0, DelayFX:0.5, ReverbFX:0.3),
+		params: (variability:0.3, density:0.3, rhythmicity:0.2, warmth:0.7)
+	),
+
+	(
+		name: \exhale, fadeTime: 8, paramTime: 60, dur: 8,
+		scale: \inSen,
+		layersOn: (Pad:true, Drone:true, Bass:true, VinylTex:true),
+		targets: (Bass:0.5, Pad:1.0, Drone:1.0, RainTex:0, VinylTex:1.0, Master:1.0, DelayFX:0.2, ReverbFX:0.8),
+		params: (warmth:0.4, brightness:0.35, density:0.2, variability:0.15)
+	)
+];
 )
 
 
-// ====== Patterns ======
+// ====== Pdefs ======
 
 (
 ~makePatterns = {
-	~seaPattern = Pbind(
-		\instrument, \seaSynth,
-		\legato,      Pwhite(0.95, 1.05),
+	// Sea
+	Pdef(\sea,
+		Pbind(
+			\instrument, \seaSynth,
+			\legato,      Pwhite(0.95, 1.05),
 
-		// time between waves, in beats
-		\dur,         Pfunc { ~getMapped.(\dur) },
+			// time between waves, in beats
+			\dur,         Pfunc { ~getMapped.(\dur) },
 
-		// envelope shaping (fractions of dur)
-		\atkFrac,     Pwhite(0.1, 0.4),   // fraction of dur
-		\susFrac,     Pwhite(0.05, 0.2),  // fraction of dur
+			// envelope shaping (fractions of dur)
+			\atkFrac,     Pwhite(0.1, 0.4),
+			\susFrac,     Pwhite(0.05, 0.2),
 
-		// convert fractions to actual seconds
-		\atk, Pfunc { |ev|
-			ev[\atkFrac] * ev[\dur] * thisThread.clock.beatDur
-		},
-		\sus, Pfunc { |ev|
-			ev[\susFrac] * ev[\dur] * thisThread.clock.beatDur
-		},
-		\rel, Pfunc { |ev|
-			var beatDur   = thisThread.clock.beatDur;
-			var totalBeats = ev[\dur];
-			var atkBeats   = ev[\atkFrac] * totalBeats;
-			var susBeats   = ev[\susFrac] * totalBeats;
-			var relBeats   = (totalBeats - atkBeats - susBeats).max(0.1);
-			relBeats * beatDur
-		},
+			// convert fractions to actual seconds
+			\atk, Pfunc { |ev|
+				ev[\atkFrac] * ev[\dur] * thisThread.clock.beatDur
+			},
+			\sus, Pfunc { |ev|
+				ev[\susFrac] * ev[\dur] * thisThread.clock.beatDur
+			},
+			\rel, Pfunc { |ev|
+				var beatDur   = thisThread.clock.beatDur;
+				var totalBeats = ev[\dur];
+				var atkBeats   = ev[\atkFrac] * totalBeats;
+				var susBeats   = ev[\susFrac] * totalBeats;
+				var relBeats   = (totalBeats - atkBeats - susBeats).max(0.1);
+				relBeats * beatDur
+			},
 
-		// synthesis params
-		\ffreq,       1500,
-		\rq,          0.7,
-		\waveDepth,   Pfunc({ ~mapLin.(~parameters[\density], 0, 1, 0.1, 0.6) }),
-		\waveRate,    Pfunc({ ~mapLin.(~parameters[\variability], 0, 1, 0.02, 0.08) }),
-		\pan,         Pwhite(-1.0, 1.0),
-		\amp,         Pfunc({ ~getMapped.(\seaAmp) }),
-		\out,         ~seaBus
+			// synthesis params
+			\ffreq,       1500,
+			\rq,          0.7,
+			\waveDepth,   Pfunc({ ~mapLin.(~parameters[\density], 0, 1, 0.1, 0.6) }),
+			\waveRate,    Pfunc({ ~mapLin.(~parameters[\variability], 0, 1, 0.02, 0.08) }),
+			\pan,         Pwhite(-1.0, 1.0),
+			\amp,         Pfunc({ ~getMapped.(\seaAmp) }),
+			\out,         ~seaBus
+		)
 	);
 
-	~vinylPattern = Pmono(
-		\vinylCrackle,
-		\dur,         Pfunc({ ~getMapped.(\dur) }),
-		\dustDensity, Pfunc({
-			var lo = 10 - rrand(0, 3);
-			var hi = 20 - rrand(0, 5);
-			~mapExp.(~parameters[\density], 0, 1, lo, hi)}),
-		\lpFreq,      Pwhite(2000, 5000),
-		\hpFreq,      Pwhite(500, 1500),
-		\humLevel,    Pfunc({ ~getMapped.(\humLevel) }),
-		\rumbleLevel, Pfunc({ ~getMapped.(\rumbleLevel) }),
-		\amp,         Pfunc({ ~getMapped.(\vinylAmp) } ),
-		\out,        ~vinylBus
+	// Vinyl
+	Pdef(\vinyl,
+		Pmono(
+			\vinylCrackle,
+			\dur,         Pfunc({ ~getMapped.(\dur) }),
+			\dustDensity, Pfunc({
+				var lo = 10 - rrand(0, 3);
+				var hi = 20 - rrand(0, 5);
+				~mapExp.(~parameters[\density], 0, 1, lo, hi)
+			}),
+			\lpFreq,      Pwhite(2000, 5000),
+			\hpFreq,      Pwhite(500, 1500),
+			\humLevel,    Pfunc({ ~getMapped.(\humLevel) }),
+			\rumbleLevel, Pfunc({ ~getMapped.(\rumbleLevel) }),
+			\amp,         Pfunc({ ~getMapped.(\vinylAmp) }),
+			\out,         ~vinylBus
+		)
 	);
 
-	~rainPattern = Pmono(
-		\rainTexture,
-		\dur,         Pfunc({ ~getMapped.(\dur) }),   // update every cycle
-		\densFactor,  Pfunc({ ~mapLin.(~parameters[\variability], 0, 1, 1, 2) }),
-		\highpass,    Pfunc({ ~mapLin.(~parameters[\brightness], 0, 1, 200, 2000) }),
-		\lowpass,     Pfunc({ ~mapLin.(~parameters[\brightness], 0, 1, 3000, 8000) }),
-		\revMix,      Pfunc({ ~getMapped.(\revMix) }),
-		\amp,         Pfunc({ ~getMapped.(\rainAmp) }),
-		\out,         ~rainBus
+	// Rain
+	Pdef(\rain,
+		Pmono(
+			\rainTexture,
+			\dur,        Pfunc({ ~getMapped.(\dur) }),
+			\densFactor, Pfunc({ ~mapLin.(~parameters[\variability], 0, 1, 1, 2) }),
+			\hp,         Pfunc({ ~mapLin.(~parameters[\brightness], 0, 1, 200, 2000) }),
+			\lp,         Pfunc({ ~mapLin.(~parameters[\brightness], 0, 1, 3000, 8000) }),
+			\revMix,     Pfunc({ ~getMapped.(\revMix) }),
+			\amp,        Pfunc({ ~getMapped.(\rainAmp) }),
+			\out,        ~rainBus
+		)
 	);
+
+	"[Patterns] Rebuilt and registered into Pdefs".postln;
 };
-)
 
 
-(
+
+// Generator
 Pdef(\ambgen,
 	Pspawner { |sp|
 		var padSynths = List[];
@@ -2186,29 +2248,29 @@ Pdef(\ambgen,
 
 		var chord, dur, durations, padFreqs, padPans, bassFreq;
 
-		// --- Background textures ---
-		if(~layerOn[\VinylTex]) { sp.par(~vinylPattern) };
-		if(~layerOn[\RainTex])  { sp.par(~rainPattern)  };
-		if(~layerOn[\SeaTex])   { sp.par(~seaPattern)   };
+		// --- Background textures (now Pdefs) ---
+		if(~layerOn[\VinylTex]) { sp.par(Pdef(\vinyl)) };
+		if(~layerOn[\RainTex])  { sp.par(Pdef(\rain))  };
+		if(~layerOn[\SeaTex])   { sp.par(Pdef(\sea))   };
 
 		loop {
 			chord = ~nextChord.();
 			dur   = ~getMapped.(\dur);
 			durations = ~genDurations.(dur);
 
-			// trigger score fade here if a new score is pending
+			// trigger score fade if pending
 			if(~nextScore.notNil) {
 				~enterScore.(~nextScore);
 				~nextScore = nil;
 			};
 
-			// Stop & clear previous synths
+			// stop old synths
 			padSynths.do { |s| s.set(\gate, 0) };      padSynths.clear;
 			darkPadSynths.do { |s| s.set(\gate, 0) };  darkPadSynths.clear;
 			bassSynths.do { |s| s.set(\gate, 0) };     bassSynths.clear;
 			droneSynths.do { |s| s.set(\gate, 0) };    droneSynths.clear;
 
-			// precompute pad params
+			// precompute pad freqs
 			padFreqs = {
 				var freqs, detune, n, baseVoices, octaveVoices, octaveAmpFactor, voicePairs;
 				freqs  = chord.midicps;
@@ -2354,59 +2416,7 @@ Pdef(\ambgen,
 			sp.wait(dur);
 		}
 	}
-).play;
-)
-
-
-// --- Scores (Presets) ---
-
-(
-~scores = [
-	(
-		name: \intro, fadeTime: 8, paramTime: 40, dur: 4,
-		key: [\D, 3], scale: \yo,
-		layersOn: (SeaTex:true, Drone:true, Pad:false, DarkPad:false, Bass:false, HarpArp:false, GlassArp:false, Bell:false, RainTex:false, VinylTex:false),
-		targets: (SeaTex:1.0, Drone:1.0, DarkPad:0, Pad:0, Bass:0, Bell:0, HarpArp:0, GlassArp:0, Bell:0, RainTex:0, VinylTex:0, Master:1.0, FXMaster:0.85, ReverbFX:0.6, DelayFX:0.2),
-		params: (warmth:0.4, brightness:0.35, density:0.2, variability:0.2, rhythmicity:0.3)
-	),
-
-	(
-		name: \firstPads, fadeTime: 6, paramTime: 60, dur: 8,
-		layersOn: (DarkPad:true, Drone:true, SeaTex:true),
-		targets: (DarkPad:1.0, Drone:0.8, SeaTex:0.8, Master:1.0, ReverbFX:0.50, DelayFX:0.30),
-		params: (warmth:0.3, brightness:0.45, density:0.3, variability:0.3, rhythmicity:0.5)
-	),
-
-	(
-		name: \shimmer, fadeTime: 6, paramTime: 60, dur: 6,
-		scale: \lydianDominant,
-		layersOn: (GlassArp:true, Pad:true, RainTex:true, SeaTex:false),
-		targets: (GlassArp:1.0, Pad:0.7, RainTex:1, SeaTex:0, Master:1.0, DelayFX:0.4, ReverbFX:0.7),
-		params: (brightness:0.6, density:0.3, variability:0.35, warmth:0.8, rhythmicity:0.3)
-	),
-
-	(
-		name: \ground, fadeTime: 6, paramTime: 70, dur: 12,
-		layersOn: (Bass:true, DarkPad:true, GlassArp:false, Pad:false, RainTex:true),
-		targets: (Bass:0.6, DarkPad:1.0, GlassArp:0, Pad:0, RainTex:0.6, Master:1.0, DelayFX:0.25, SaturatorFX:0.5),
-		params: (warmth:0.5, brightness:0.5, density:0.38, rhythmicity:0.7)
-	),
-
-	(
-		name: \punctuate, fadeTime: 3, paramTime: 30, dur: 6,
-		layersOn: (VinylTex:true, RainTex:false, Bell:true, HarpArp:true),
-		targets: (Bass:0, DarkPad:0, RainTex:0, VinylTex:1.0, Bell:1.0, HarpArp:1.0, Master:1.0, DelayFX:0.5, ReverbFX:0.3),
-		params: (variability:0.3, density:0.3, rhythmicity:0.2, warmth:0.7)
-	),
-
-	(
-		name: \exhale, fadeTime: 8, paramTime: 60, dur: 8,
-		scale: \inSen,
-		layersOn: (Pad:true, Drone:true, Bass:true, VinylTex:true),
-		targets: (Bass:0.5, Pad:1.0, Drone:1.0, RainTex:0, VinylTex:1.0, Master:1.0, DelayFX:0.2, ReverbFX:0.8),
-		params: (warmth:0.4, brightness:0.35, density:0.2, variability:0.15)
-	)
-];
+);
 )
 
 
