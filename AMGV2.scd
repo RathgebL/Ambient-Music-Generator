@@ -1144,7 +1144,7 @@ SynthDef(\rainTexture, { |out = 0, densFactor = 1, hp=400, lp=6000, amp=0.2|
     var scale = ~scaleToMidi.();
     var note = scale.wrapAt(degree - 1); // pick scale degree
     note = note + (12 * octaveShift);           // shift if needed
-	("[Drone DEBUG] Note: " ++ note ++ " | "
+	("[Drone] Note: " ++ note ++ " | "
 		++ note.midicps).postln;
 
 	note
@@ -1247,9 +1247,9 @@ SynthDef(\rainTexture, { |out = 0, densFactor = 1, hp=400, lp=6000, amp=0.2|
 
 	// Debug: check for duplicates
 	if(chosenSteps.size != chosenSteps.as(Set).size) {
-		("[WeightedChord DEBUG] Duplicate found: " ++ chosenSteps).warn;
+		("[WeightedChord] Duplicate found: " ++ chosenSteps).warn;
 	} {
-		("[WeightedChord DEBUG] Unique notes: " ++ chosenSteps).postln;
+		("[WeightedChord] Unique notes: " ++ chosenSteps).postln;
 	};
 
 	// map steps to MIDI and sort
@@ -1274,7 +1274,7 @@ SynthDef(\rainTexture, { |out = 0, densFactor = 1, hp=400, lp=6000, amp=0.2|
     };
 
     // Debug
-    ("[RelClamp DEBUG] Root: " ++ root
+    ("[RelClamp] Root: " ++ root
         ++ " | Range: " ++ minNote ++ "-" ++ maxNote
         ++ " | Before: " ++ notes
         ++ " | After: " ++ clamped).postln;
@@ -1296,7 +1296,7 @@ SynthDef(\rainTexture, { |out = 0, densFactor = 1, hp=400, lp=6000, amp=0.2|
     };
 
 	// Debug print
-	("[Clamp DEBUG]  Min: " ++ minNote
+	("[AbsClamp]  Min: " ++ minNote
 	 ++ " | Max: " ++ maxNote
 	 ++ " | Before: " ++ notes
 	 ++ " | After: " ++ clamped).postln;
@@ -1358,7 +1358,7 @@ SynthDef(\rainTexture, { |out = 0, densFactor = 1, hp=400, lp=6000, amp=0.2|
 	chord = ~clampChordRangeStatic.(chord);
 
 	// Debug print final chord (both MIDI & Hz + voice count)
-	("[Chord DEBUG @ " ++ Main.elapsedTime.round(0.01) ++ "] Voices: "
+	("[Final Chord @ " ++ Main.elapsedTime.round(0.01) ++ "] Voices: "
     ++ chord.size ++ " | MIDI: " ++ chord ++ " | Hz: " ++ chord.midicps).postln;
 
     ~lastChord = chord;
@@ -1728,30 +1728,30 @@ SynthDef(\rainTexture, { |out = 0, densFactor = 1, hp=400, lp=6000, amp=0.2|
     var v = ~parameters[\variability];
 
     if(n == 5) {
-        "Using Pentatonic Markov table".postln;
+		"[Markov] Using Pentatonic Markov table".postln;
         ~degreeMarkov2Pent
 
     } {
         if(n == 6) {
-            "Using Hexatonic Markov table".postln;
+            "[Markov] Using Hexatonic Markov table".postln;
             ~degreeMarkov2Hex
 
         } {
             if(n == 8) {
-                "Using Octatonic Markov table".postln;
+                "[Markov] Using Octatonic Markov table".postln;
                 ~degreeMarkov2Oct
 
             } {
                 // Default case = heptatonic (7-note scales)
                 if(v < 0.4) {
-                    "Using Ambient Markov table".postln;
+                    "[Markov] Using Ambient Markov table".postln;
                     ~degreeMarkov2Ambient
                 } {
                     if(v < 0.75) {
-                        "Using Balanced Markov table".postln;
+                        "[Markov] Using Balanced Markov table".postln;
                         ~degreeMarkov2
                     } {
-                        "Using Exotic Markov table".postln;
+                        "[Markov] Using Exotic Markov table".postln;
                         ~degreeMarkov2Exotic
                     }
                 }
@@ -1770,9 +1770,9 @@ SynthDef(\rainTexture, { |out = 0, densFactor = 1, hp=400, lp=6000, amp=0.2|
 	var key, pairs, total, r, result, acc, penaltyFactor;
 
 	pairs = ~degreeMarkov2[10 * ~prevDegree + ~currentDegree];
-	// Debug print
-	("[Markov DEBUG] pairs: " ++ pairs).postln;
 
+	// Debug print
+	("[Markov] pairs: " ++ pairs).postln;
 
 	if(pairs.isNil) {pairs = [[1,1.0]]};
 	penaltyFactor = (0.5).pow(~sameDegreeCount - 1);
@@ -1796,8 +1796,8 @@ SynthDef(\rainTexture, { |out = 0, densFactor = 1, hp=400, lp=6000, amp=0.2|
 	}[0];
 
 	// Debug print
-	("[Markov DEBUG] prev: " ++ ~prevDegree
-		++ " curr: " ++ ~currentDegree
+	("[Markov] previous: " ++ ~prevDegree
+		++ " -> current: " ++ ~currentDegree
 		++ " -> next: " ++ result
 		++ " | sameCount: " ++ ~sameDegreeCount).postln;
 
@@ -1824,7 +1824,7 @@ SynthDef(\rainTexture, { |out = 0, densFactor = 1, hp=400, lp=6000, amp=0.2|
     while { x > max } { x = x - 12 };
 
 	// Debug print bass note (both MIDI & Hz)
-    ("[Bass DEBUG] MIDI: " ++ x ++ " | Hz: " ++ x.midicps).postln;
+    ("[Bass] MIDI: " ++ x ++ " | Hz: " ++ x.midicps).postln;
 
     x
 };
@@ -1871,7 +1871,7 @@ SynthDef(\rainTexture, { |out = 0, densFactor = 1, hp=400, lp=6000, amp=0.2|
 	result = result.collect { |x| x * 0.000001 };
 
 	// Debug print the full result
-	("[Arp DEBUG] Array size: " ++ result.size ++ ", Array: " ++ result).postln;
+	("[Arp] Array size: " ++ result.size ++ " | Array: " ++ result).postln;
 
 	result
 };
@@ -1962,7 +1962,7 @@ SynthDef(\fade, { |bus, start = 0, end = 1, dur = 8, curve = -0.5|
 
     ~busLevels[bus] = target;  // update mirror
 
-    ("[fadeSmart] bus % (idx %) from % to % in %s (curve %)"
+    ("[Fade] bus % (idx %) from % to % in %s (curve %)"
         .format(bus, bus.index, start, target, time, curve)).postln;
 };
 
@@ -1975,7 +1975,7 @@ SynthDef(\fade, { |bus, start = 0, end = 1, dur = 8, curve = -0.5|
         if(bus.notNil) {
             ~fadeSmart.(bus, v, time);
         } {
-            ("[targetsToFades] WARNING: No bus for " ++ k).postln;
+            ("[Target] WARNING: No bus for " ++ k).postln;
         };
     };
 };
@@ -1987,7 +1987,7 @@ SynthDef(\fade, { |bus, start = 0, end = 1, dur = 8, curve = -0.5|
 	var mult = 10;
 	var steps = dur * mult;
 
-    ("[rampParam] Starting ramp for %: start=%, target=%, steps=%, curve=%"
+    ("[Ramp] Starting ramp for %: start=%, target=%, steps=%, curve=%"
         .format(key, start, to, steps, curve)).postln;
 
     Task({
@@ -2000,7 +2000,7 @@ SynthDef(\fade, { |bus, start = 0, end = 1, dur = 8, curve = -0.5|
 
         // final target
         ~setParam.(key, to);
-        ("[rampParam] Finished ramp for % at final value % (mapped → %)"
+        ("[Ramp] Finished ramp for % at final value % (mapped → %)"
             .format(key, to, ~getMapped.(key))).postln;
     }).start;
 };
@@ -2009,34 +2009,34 @@ SynthDef(\fade, { |bus, start = 0, end = 1, dur = 8, curve = -0.5|
 	var val, dict;
     if(scene.isNil) { ^IdentityDictionary[] };
 
-    ("[normalizeScene] input class: " ++ scene.class).postln;
+    ("[Normalize] input class: " ++ scene.class).postln;
 
     // Convert Event → IdentityDictionary
     dict = if(scene.isKindOf(Event)) {
-        ("[normalizeScene] converting Event to IdentityDictionary").postln;
+        ("[Normalize] converting Event to IdentityDictionary").postln;
         IdentityDictionary.newFrom(scene)
     } {
         scene
     };
 
-    ("[normalizeScene] after Event conversion → " ++ dict.class).postln;
+    ("[Normalize] after Event conversion → " ++ dict.class).postln;
 
     // Normalize fields
     [\layersOn, \targets, \params, \fx].do { |key|
         val = dict[key];
         if(val.notNil) {
             if(val.isKindOf(Event)) {
-                ("[normalizeScene] key " ++ key ++ " is Event, converting").postln;
+                ("[Normalize] key " ++ key ++ " is Event, converting").postln;
                 dict[key] = IdentityDictionary.newFrom(val);
             } {
                 if(val.isKindOf(Dictionary).not) {
-                    ("[normalizeScene] WARNING: key " ++ key ++ " is not a Dictionary, but " ++ val.class).warn;
+                    ("[Normalize] WARNING: key " ++ key ++ " is not a Dictionary, but " ++ val.class).warn;
                 };
             };
         };
     };
 
-    ("[normalizeScene] output keys: " ++ dict.keys).postln;
+    ("[Normalize] output keys: " ++ dict.keys).postln;
     dict;
 };
 
@@ -2045,7 +2045,7 @@ SynthDef(\fade, { |bus, start = 0, end = 1, dur = 8, curve = -0.5|
 	var allParams;
 
     scene = ~normalizeScene.(scene);  // ensure proper format
-    ("Entering scene: " ++ scene[\name]).postln;
+	("[Scene] Entering scene: " ++ scene[\name]).postln;
 
     // Scale / key (optional)
     if(scene[\key].notNil)   { ~setKey.(scene[\key][0], scene[\key][1]) };
@@ -2056,7 +2056,7 @@ SynthDef(\fade, { |bus, start = 0, end = 1, dur = 8, curve = -0.5|
 		~layerOn.keysDo { |k|
 			~layerOn[k] = scene[\layersOn][k] ? false.asBoolean;
 		};
-		("[enterScene] Updated layerOn: " ++ ~layerOn).postln;
+		("[Scene] Updated layerOn: " ++ ~layerOn).postln;
 	};
 
 	// Fade to target
@@ -2405,13 +2405,13 @@ Pdef(\ambgen,
 ~startRoutine = { |name, routineFunc|
     var existing = ~routines[name];
     if(existing.notNil and: { existing.isPlaying }) {
-        ("[RoutineGuard] " ++ name ++ " already running. Skipping.").postln;
+        ("[Routine] " ++ name ++ " already running. Skipping.").postln;
         existing  // return the existing one
     } {
         var r = routineFunc.();
         r.play(TempoClock.default);
         ~routines[name] = r; // store in dictionary
-        ("[RoutineGuard] Started " ++ name).postln;
+        ("[Routine] Started " ++ name).postln;
         r  // return the new routine
     };
 };
@@ -2421,10 +2421,10 @@ Pdef(\ambgen,
     var r = ~routines[name];
     if(r.notNil and: { r.isPlaying }) {
         r.stop;
-        ("[RoutineGuard] Stopped " ++ name).postln;
+        ("[Routine] Stopped " ++ name).postln;
         ~routines.removeAt(name); // cleanup
     } {
-        ("[RoutineGuard] Not running: " ++ name).postln;
+        ("[Routine] Not running: " ++ name).postln;
     };
 };
 )
@@ -2438,7 +2438,7 @@ Pdef(\ambgen,
     Routine({
         // start ambgen if not running
         if(Pdef(\ambgen).isPlaying.not) {
-            "Starting ambgen...".postln;
+            ">>> Starting ambgen".postln;
             Pdef(\ambgen).play;
         };
 
@@ -2453,8 +2453,6 @@ Pdef(\ambgen,
 )
 
 ~stopRoutine.(\conductor);
-
-~seaCtrl.get({ |val| ("SeaCtrl bus = " ++ val).postln });
 
 
 // Routine to change scales
@@ -2519,7 +2517,7 @@ Pdef(\ambgen,
 			idx = (~parameters[\variability] * 6).floor.clip(0, 5);
 			waitTime = factors[idx] * ~getMapped.(\dur);
 
-			("Next wait time: " ++ waitTime).postln; // debug
+			("[Scale Changer] Next wait time: " ++ waitTime).postln; // debug
 			waitTime.wait;
 		}
 	});
@@ -2591,7 +2589,7 @@ Pdef(\ambgen,
 			// update bookkeeping
 			~layerOn.keysDo { |k| ~layerOn[k] = active.includes(k) };
 
-			("[InstrumentChanger] Active (fading): " ++ active).postln;
+			("[Instrument Changer] Active (fading): " ++ active).postln;
 
 			// 6. Wait time in chord cycles (scaled by variability)
 			cycleWait = rrand(4, 12); // between 4 and 12 chords
@@ -2602,10 +2600,6 @@ Pdef(\ambgen,
 )
 
 ~stopRoutine.(\instrumentChanger);
-
-
-~busLevels.postln;
-
 
 
 // --- Usage & Checks ---
