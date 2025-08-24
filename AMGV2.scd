@@ -25,6 +25,93 @@ s.waitForBoot({
 )
 
 
+// ====== Buses ======
+
+~resetMixer.();
+~busesAllocated = false;
+~allocBuses.();
+
+(
+~allocBuses = {
+    if(~busesAllocated.not) {
+        "Allocating buses...".postln;
+
+	// Audio Buses
+	~masterBus       = Bus.audio(s, 2);
+
+	~padBus          = Bus.audio(s, 2);
+	~darkPadBus      = Bus.audio(s, 2);
+	~bassBus         = Bus.audio(s, 2);
+	~droneBus        = Bus.audio(s, 2);
+	~harpBus         = Bus.audio(s, 2);
+	~glassBus        = Bus.audio(s, 2);
+	~bellBus         = Bus.audio(s, 2);
+	~seaBus          = Bus.audio(s, 2);
+	~rainBus         = Bus.audio(s, 2);
+	~vinylBus        = Bus.audio(s, 2);
+
+	~revBus          = Bus.audio(s, 2);
+	~compBus         = Bus.audio(s, 2);
+	~delBus          = Bus.audio(s, 2);
+	~satBus          = Bus.audio(s, 2);
+
+	~padGroupBus     = Bus.audio(s, 2);
+	~bassGroupBus    = Bus.audio(s, 2);
+	~droneGroupBus   = Bus.audio(s, 2);
+	~bellGroupBus    = Bus.audio(s, 2);
+	~arpGroupBus     = Bus.audio(s, 2);
+	~texGroupBus     = Bus.audio(s, 2);
+	~fxGroup         = Bus.audio(s, 2);
+
+	~padDryBus       = Bus.audio(s, 2);
+	~bassDryBus      = Bus.audio(s, 2);
+	~droneDryBus     = Bus.audio(s, 2);
+	~bellDryBus      = Bus.audio(s, 2);
+	~arpDryBus       = Bus.audio(s, 2);
+	~texDryBus       = Bus.audio(s, 2);
+
+	// Control Buses
+	~masterCtrl      = Bus.control(s, 1).set(1);
+
+	~padCtrl         = Bus.control(s, 1).set(0.5);
+	~darkPadCtrl     = Bus.control(s, 1).set(0.5);
+	~bassCtrl        = Bus.control(s, 1).set(0.5);
+	~droneCtrl       = Bus.control(s, 1).set(0.5);
+	~bellCtrl        = Bus.control(s, 1).set(0.5);
+	~harpCtrl        = Bus.control(s, 1).set(0.5);
+	~glassCtrl       = Bus.control(s, 1).set(0.5);
+	~seaCtrl         = Bus.control(s, 1).set(0.5);
+	~rainCtrl        = Bus.control(s, 1).set(0.5);
+	~vinylCtrl       = Bus.control(s, 1).set(0.5);
+
+	~revCtrl         = Bus.control(s, 1).set(1);
+	~compCtrl        = Bus.control(s, 1).set(1);
+	~delCtrl         = Bus.control(s, 1).set(1);
+	~satCtrl         = Bus.control(s, 1).set(1);
+
+	~padGroupCtrl    = Bus.control(s, 1).set(1);
+	~bassGroupCtrl   = Bus.control(s, 1).set(1);
+	~droneGroupCtrl  = Bus.control(s, 1).set(1);
+	~bellGroupCtrl   = Bus.control(s, 1).set(1);
+	~arpGroupCtrl    = Bus.control(s, 1).set(1);
+	~texGroupCtrl    = Bus.control(s, 1).set(1);
+	~fxGroupCtrl     = Bus.control(s, 1).set(1);
+
+	~padDryCtrl      = Bus.control(s, 1).set(1);
+	~bassDryCtrl     = Bus.control(s, 1).set(1);
+	~droneDryCtrl    = Bus.control(s, 1).set(1);
+	~bellDryCtrl     = Bus.control(s, 1).set(1);
+	~arpDryCtrl      = Bus.control(s, 1).set(1);
+	~texDryCtrl      = Bus.control(s, 1).set(1);
+
+	~busesAllocated = true; // mark as done
+    } {
+        "Buses already allocated, skipping.".postln;
+    };
+};
+)
+
+
 // ====== SynthDefs ======
 
 (
@@ -582,100 +669,15 @@ SynthDef(\fade, { |bus, start = 0, end = 1, dur = 8, curve = -0.5|
 )
 
 
-// ====== Buses ======
-
-~resetMixer.();
-~busesAllocated = false;
-~allocBuses.();
-
-(
-~allocBuses = {
-    if(~busesAllocated.not) {
-        "Allocating buses...".postln;
-
-	// Audio Buses
-	~masterBus       = Bus.audio(s, 2);
-
-	~padBus          = Bus.audio(s, 2);
-	~darkPadBus      = Bus.audio(s, 2);
-	~bassBus         = Bus.audio(s, 2);
-	~droneBus        = Bus.audio(s, 2);
-	~harpBus         = Bus.audio(s, 2);
-	~glassBus        = Bus.audio(s, 2);
-	~bellBus         = Bus.audio(s, 2);
-	~seaBus          = Bus.audio(s, 2);
-	~rainBus         = Bus.audio(s, 2);
-	~vinylBus        = Bus.audio(s, 2);
-
-	~revBus          = Bus.audio(s, 2);
-	~compBus         = Bus.audio(s, 2);
-	~delBus          = Bus.audio(s, 2);
-	~satBus          = Bus.audio(s, 2);
-
-	~padGroupBus     = Bus.audio(s, 2);
-	~bassGroupBus    = Bus.audio(s, 2);
-	~droneGroupBus   = Bus.audio(s, 2);
-	~bellGroupBus    = Bus.audio(s, 2);
-	~arpGroupBus     = Bus.audio(s, 2);
-	~texGroupBus     = Bus.audio(s, 2);
-	~fxGroup         = Bus.audio(s, 2);
-
-	~padDryBus       = Bus.audio(s, 2);
-	~bassDryBus      = Bus.audio(s, 2);
-	~droneDryBus     = Bus.audio(s, 2);
-	~bellDryBus      = Bus.audio(s, 2);
-	~arpDryBus       = Bus.audio(s, 2);
-	~texDryBus       = Bus.audio(s, 2);
-
-	// Control Buses
-	~masterCtrl      = Bus.control(s, 1).set(1);
-
-	~padCtrl         = Bus.control(s, 1).set(0.5);
-	~darkPadCtrl     = Bus.control(s, 1).set(0.5);
-	~bassCtrl        = Bus.control(s, 1).set(0.5);
-	~droneCtrl       = Bus.control(s, 1).set(0.5);
-	~bellCtrl        = Bus.control(s, 1).set(0.5);
-	~harpCtrl        = Bus.control(s, 1).set(0.5);
-	~glassCtrl       = Bus.control(s, 1).set(0.5);
-	~seaCtrl         = Bus.control(s, 1).set(0.5);
-	~rainCtrl        = Bus.control(s, 1).set(0.5);
-	~vinylCtrl       = Bus.control(s, 1).set(0.5);
-
-	~revCtrl         = Bus.control(s, 1).set(1);
-	~compCtrl        = Bus.control(s, 1).set(1);
-	~delCtrl         = Bus.control(s, 1).set(1);
-	~satCtrl         = Bus.control(s, 1).set(1);
-
-	~padGroupCtrl    = Bus.control(s, 1).set(1);
-	~bassGroupCtrl   = Bus.control(s, 1).set(1);
-	~droneGroupCtrl  = Bus.control(s, 1).set(1);
-	~bellGroupCtrl   = Bus.control(s, 1).set(1);
-	~arpGroupCtrl    = Bus.control(s, 1).set(1);
-	~texGroupCtrl    = Bus.control(s, 1).set(1);
-	~fxGroupCtrl     = Bus.control(s, 1).set(1);
-
-	~padDryCtrl      = Bus.control(s, 1).set(1);
-	~bassDryCtrl     = Bus.control(s, 1).set(1);
-	~droneDryCtrl    = Bus.control(s, 1).set(1);
-	~bellDryCtrl     = Bus.control(s, 1).set(1);
-	~arpDryCtrl      = Bus.control(s, 1).set(1);
-	~texDryCtrl      = Bus.control(s, 1).set(1);
-
-	~busesAllocated = true; // mark as done
-    } {
-        "Buses already allocated, skipping.".postln;
-    };
-};
-
-
 // ====== Engines ======
 
+(
 // --- Start mixing engine (groups + faders) ---
 ~startMixingEngine = {
 	// Groups
 	~mixerGroup        = Group.head(s);
-	~sourcesGroup      = Group.head(~mixerGroup);
-	~fadersGroup       = Group.after(~sourcesGroup);
+	~controlGroup      = Group.after(~mixerGroup);
+	~fadersGroup       = Group.after(~controlGroup);
 	~groupFadersGroup  = Group.after(~fadersGroup);
 	~dryGroup          = Group.after(~groupFadersGroup);
 	~sendsGroup        = Group.after(~dryGroup);
@@ -987,7 +989,7 @@ rhythmicity from fluid/free to rhythmic/structured -> pulse emphasis
 	noiseAmp:     { ~mapExp.(~parameters[\density],     0, 1, 0.5, 1) },
 	seaAmp:       { ~mapExp.(~parameters[\density],     0, 1, 0.1, 0.3) },
 	rainAmp:      { ~mapExp.(~parameters[\density],     0, 1, 0.5, 1) },
-	vinylAmp:     { ~mapExp.(~parameters[\density],     0, 1, 0.1, 0.3) },
+	vinylAmp:     { ~mapExp.(~parameters[\density],     0, 1, 0.1, 0.2) },
 
 	numVoices: {
 		var raw = ~mapLin.(~parameters[\density], 0, 1, 1, 9).round.asInteger;
@@ -1930,7 +1932,7 @@ rhythmicity from fluid/free to rhythmic/structured -> pulse emphasis
 	\GlassArp -> false,
 	\Bell -> false,
 	\SeaTex -> true,
-	\RainTex -> true,
+	\RainTex -> false,
 	\VinylTex -> false
 ];
 
@@ -1987,7 +1989,7 @@ rhythmicity from fluid/free to rhythmic/structured -> pulse emphasis
 		\end, target,
 		\dur, time,
 		\curve, curve
-	], target: ~masterGroup);
+	], target: ~controlGroup);
 
 	~busLevels[bus] = target;  // update mirror
 
@@ -2015,7 +2017,7 @@ rhythmicity from fluid/free to rhythmic/structured -> pulse emphasis
         ~padCtrl, ~darkPadCtrl, ~bassCtrl, ~droneCtrl, ~bellCtrl,
 		~harpCtrl, ~glassCtrl, ~seaCtrl, ~rainCtrl, ~vinylCtrl
     ].do { |bus| if(bus.notNil) { bus.set(setValue) } };
-	("[Faders] All instruments set to " ++ setValue).postln;
+	("[Faders] Instrument set to " ++ setValue).postln;
 };
 
 //  Set group faders
@@ -2024,14 +2026,14 @@ rhythmicity from fluid/free to rhythmic/structured -> pulse emphasis
         ~padGroupCtrl, ~bassGroupCtrl, ~droneGroupCtrl,
         ~bellGroupCtrl, ~arpGroupCtrl, ~texGroupCtrl, ~fxGroupCtrl,
     ].do { |bus| if(bus.notNil) { bus.set(setValue) } };
-    ("[Faders] All instruments set to " ++ setValue).postln;
+    ("[Faders] Groups set to " ++ setValue).postln;
 };
 //  Set FX faders
 ~setFxFaders = {|setValue|
     [
         ~revCtrl, ~compCtrl, ~delCtrl, ~satCtrl
     ].do { |bus| if(bus.notNil) { bus.set(setValue) } };
-    ("[Faders] All instruments set to " ++ setValue).postln;
+    ("[Faders] FX set to " ++ setValue).postln;
 };
 
 //  Set dry sends
@@ -2040,7 +2042,7 @@ rhythmicity from fluid/free to rhythmic/structured -> pulse emphasis
         ~padDryCtrl, ~bassDryCtrl, ~droneDryCtrl,
         ~bellDryCtrl, ~arpDryCtrl, ~texDryCtrl
     ].do { |bus| if(bus.notNil) { bus.set(setValue) } };
-    ("[Faders] All instruments set to " ++ setValue).postln;
+    ("[Faders] Dry sends set to " ++ setValue).postln;
 };
 
 //  Set master faders
@@ -2048,7 +2050,7 @@ rhythmicity from fluid/free to rhythmic/structured -> pulse emphasis
     [
 		~fxGroupCtrl, ~masterCtrl
     ].do { |bus| if(bus.notNil) { bus.set(setValue) } };
-    ("[Faders] All instruments set to " ++ setValue).postln;
+    ("[Faders] Master set to " ++ setValue).postln;
 };
 
 // Gradually change high level parameters
@@ -2167,19 +2169,19 @@ rhythmicity from fluid/free to rhythmic/structured -> pulse emphasis
 	(
 		name: \intro, fadeTime: 10, paramTime: 40, dur: 4,
 		key: [\D, 3], scale: \yo,
-		layersOn: (RainTex:true, SeaTex:true, Drone:true, Pad:false, DarkPad:false, Bass:false, HarpArp:false, GlassArp:false, Bell:false, RainTex:false, VinylTex:false),
-		targets: (RainTex:1, SeaTex:1.0, Drone:1.0, DarkPad:0, Pad:0, Bass:0, Bell:0, HarpArp:0, GlassArp:0, Bell:0, VinylTex:0, Master:1.0, FXMaster:0.85, ReverbFX:0.6, DelayFX:0.2),
+		layersOn: (SeaTex:true, Drone:true, Pad:false, DarkPad:false, Bass:false, HarpArp:false, GlassArp:false, Bell:false, RainTex:false, VinylTex:false),
+		targets: (SeaTex:1.0, Drone:1.0, DarkPad:0, Pad:0, Bass:0, Bell:0, HarpArp:0, GlassArp:0, Bell:0, RainTex:0, VinylTex:0, Master:1.0, FXMaster:0.85, ReverbFX:0.6, DelayFX:0.2),
 		params: (warmth:0.4, brightness:0.35, density:0.2, variability:0.2, rhythmicity:0.3)
 	),
 
 	(
-		name: \firstPads, fadeTime: 12, paramTime: 60, dur: 8,
+		name: \firstPads, fadeTime: 6, paramTime: 60, dur: 8,
 		layersOn: (DarkPad:true, Drone:true, SeaTex:true),
 		targets: (DarkPad:1.0, Drone:0.7, SeaTex:0.8, Master:1.0, ReverbFX:0.50, DelayFX:0.30),
 		params: (warmth:0.3, brightness:0.45, density:0.3, variability:0.3, rhythmicity:0.5)
 	),
 
-	(
+(
 		name: \shimmer, fadeTime: 10, paramTime: 60, dur: 6,
 		scale: \lydianDominant,
 		layersOn: (GlassArp:true, Pad:true, RainTex:true, DarkPad:true, Drone:true, SeaTex:true),
