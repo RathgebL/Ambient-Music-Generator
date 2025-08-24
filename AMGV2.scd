@@ -2576,7 +2576,7 @@ Pdef(\ambgen,
 
 ~startRoutine.(\freePlayer, {
 	Routine({
-		var allScales, weights, textures, pads, arps, others, active, tex, pad, arp, nInstruments, varChance, cycleWait, extras, fades, fadeTime, waitTime, factors, idx;
+		var allScales, weights, textures, pads, arps, others, active, tex, pad, arp, fx, nInstruments, varChance, cycleWait, extras, fades, fadeTime, waitTime, factors, idx;
 
 		//  Start mixer engine
 		if(~startMixingEngine.notNil) {
@@ -2589,7 +2589,7 @@ Pdef(\ambgen,
 		~setInstFaders.(0);
 		~setGroupFaders.(1);
 		~setDrySends.(1);
-		~setFxFaders.(0.4);
+		~setFxFaders.(0.3);
 		~setMasterFaders.(1);
 
 		0.2.wait;
@@ -2664,6 +2664,8 @@ Pdef(\ambgen,
 		pads       = [\Pad, \DarkPad];
 		arps       = [\HarpArp, \GlassArp];
 		others     = [\Drone, \Bass, \Bell];
+		fx         = [\ReverbFX, \CompFX, \DelayFX, \SaturatorFX];
+
 
 		loop {
 			// SCALE SELECTION
@@ -2679,23 +2681,23 @@ Pdef(\ambgen,
 			// INSTRUMENT SELECTION
 			fadeTime = ~mapLin.(~parameters[\rhythmicity], 0, 1, 4, 12); // seconds to fade
 
-			// 1. Always one texture
+			// Always one texture
 			tex = textures.choose;
 
-			// 2. Optional pad
+			// Optional pad
 			pad = (1.rand == 0).if { pads.choose } { nil };
 
-			// 3. Optional arp
+			// Optional arp
 			arp = (1.rand == 0).if { arps.choose } { nil };
 
-			// 4. Decide total instrument count (2–6)
+			// Decide total instrument count (2–6)
 			nInstruments = ~mapLin.(~parameters[\density], 0, 1, 2, 6).round.asInteger;
 			varChance = ~mapLin.(~parameters[\variability], 0, 1, 0.0, 0.6);
 			if(varChance.coin) {
 				nInstruments = (nInstruments + ([-1, 1].choose)).clip(2, 6);
 			};
 
-			// 5. Build active set
+			// Build active set
 			active = [tex];
 			if(pad.notNil) { active = active.add(pad) };
 			if(arp.notNil) { active = active.add(arp) };
@@ -2706,7 +2708,7 @@ Pdef(\ambgen,
 			);
 			active = active ++ extras;
 
-			// Fades
+			// FADES
 			fades = IdentityDictionary[];
 
 			// fade in chosen instruments
@@ -2719,15 +2721,30 @@ Pdef(\ambgen,
 				};
 			};
 
-			// apply fades
+			// FX SELECTION
+			fx.do { |fxName|
+				if(0.7.coin) {
+					fades[fxName] = exprand(0.1, 0.5);  // random but modest values
+				} {
+					fades[fxName] = 0.0;
+				};
+			};
+
+			("[Free Player] Active instruments (fading): " ++ active).postln;
+			("[Free Player] FX levels (fading): " ++ fx.collect { |f| f -> fades[f] }).postln;
+
+			// apply fades (both instruments + FX together)
 			~targetsToFades.(fades, fadeTime);
 
 			// update bookkeeping
 			~layerOn.keysDo { |k| ~layerOn[k] = active.includes(k) };
 
+
 			("[Free Player] Active instruments (fading): " ++ active).postln;
 
-			// --- WAIT ---
+
+
+			// Wait
 			// pick the shorter of instrument cycleWait or scale waitTime
 			cycleWait = rrand(4, 12) * ~getMapped.(\dur);
 			(cycleWait.min(waitTime)).wait;
