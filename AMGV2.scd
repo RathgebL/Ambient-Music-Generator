@@ -2009,6 +2009,48 @@ rhythmicity from fluid/free to rhythmic/structured -> pulse emphasis
 	};
 };
 
+//  Set instrument faders
+~setInstFaders = {|setValue|
+    [
+        ~padCtrl, ~darkPadCtrl, ~bassCtrl, ~droneCtrl, ~bellCtrl,
+		~harpCtrl, ~glassCtrl, ~seaCtrl, ~rainCtrl, ~vinylCtrl
+    ].do { |bus| if(bus.notNil) { bus.set(setValue) } };
+	("[Faders] All instruments set to " ++ setValue).postln;
+};
+
+//  Set group faders
+~setGroupFaders = {|setValue|
+    [
+        ~padGroupCtrl, ~bassGroupCtrl, ~droneGroupCtrl,
+        ~bellGroupCtrl, ~arpGroupCtrl, ~texGroupCtrl, ~fxGroupCtrl,
+    ].do { |bus| if(bus.notNil) { bus.set(setValue) } };
+    ("[Faders] All instruments set to " ++ setValue).postln;
+};
+//  Set FX faders
+~setFxFaders = {|setValue|
+    [
+        ~revCtrl, ~compCtrl, ~delCtrl, ~satCtrl
+    ].do { |bus| if(bus.notNil) { bus.set(setValue) } };
+    ("[Faders] All instruments set to " ++ setValue).postln;
+};
+
+//  Set dry sends
+~setDrySends = {|setValue|
+    [
+        ~padDryCtrl, ~bassDryCtrl, ~droneDryCtrl,
+        ~bellDryCtrl, ~arpDryCtrl, ~texDryCtrl
+    ].do { |bus| if(bus.notNil) { bus.set(setValue) } };
+    ("[Faders] All instruments set to " ++ setValue).postln;
+};
+
+//  Set master faders
+~setMasterFaders = {|setValue|
+    [
+		~fxGroupCtrl, ~masterCtrl
+    ].do { |bus| if(bus.notNil) { bus.set(setValue) } };
+    ("[Faders] All instruments set to " ++ setValue).postln;
+};
+
 // Gradually change high level parameters
 ~rampParam = { |key, to, dur=60, curve=\lin|
 	var start = ~getParam.(key) ?? 0.5;
@@ -2475,14 +2517,23 @@ Pdef(\ambgen,
 (
 ~startRoutine.(\conductor, {
 	Routine({
-		//  0. Start mixer engine
+		//  Start mixer engine
 		if(~startMixingEngine.notNil) {
 			~startMixingEngine.();
 			s.sync;
 			">>> Mixing engine started".postln;
 		};
 
-		// 1. start mixer GUI (safe to call multiple times)
+		// Set faders back before creating the GUI
+		~setInstFaders.(0);
+		~setGroupFaders.(1);
+		~setDrySends.(1);
+		~setFxFaders.(1);
+		~setMasterFaders.(1);
+
+		0.2.wait;
+
+		// Start mixer GUI (safe to call multiple times)
 		if(~makeMixerGUI.notNil) {
 			{
 				~makeMixerGUI.();
@@ -2490,23 +2541,23 @@ Pdef(\ambgen,
 			}.defer;  // run whole block on AppClock
 		};
 
-		0.5.wait;
+		0.4.wait;
 
 		~startGuiUpdater.();
 
-		// 2. Start the patterns
+		// Start the patterns
 		if(~makePatterns.notNil) {
 			~makePatterns.();
 			"[Conductor] Patterns created."
 		};
 
-		// 3. start ambgen if not running
+		// Start ambgen if not running
 		if(Pdef(\ambgen).isPlaying.not) {
 			">>> Starting Ambient Music Generator".postln;
 			Pdef(\ambgen).play;
 		};
 
-		// 4. cycle through scores
+		// Cycle through scores
 		~scores.do { |sc|
 			("[Conductor] Queuing score: " ++ sc[\name]).postln;
 			~nextScore = sc;   // only mark it, don't enter yet
@@ -2518,9 +2569,6 @@ Pdef(\ambgen,
 
 ~stopRoutine.(\conductor);
 
-~droneCtrl.inspect;
-
-
 
 // --- FreePlayer to play improvised ambient music (with automatic scale and instrument changes)
 
@@ -2530,11 +2578,38 @@ Pdef(\ambgen,
 	Routine({
 		var allScales, weights, textures, pads, arps, others, active, tex, pad, arp, nInstruments, varChance, cycleWait, extras, fades, fadeTime, waitTime, factors, idx;
 
+		//  Start mixer engine
+		if(~startMixingEngine.notNil) {
+			~startMixingEngine.();
+			s.sync;
+			">>> Mixing engine started".postln;
+		};
+
+		// Set faders up before creating the GUI
+		~setInstFaders.(0);
+		~setGroupFaders.(1);
+		~setDrySends.(1);
+		~setFxFaders.(0.4);
+		~setMasterFaders.(1);
+
+		0.2.wait;
+
+		// Start mixer GUI (safe to call multiple times)
 		if(~makeMixerGUI.notNil) {
 			{
 				~makeMixerGUI.();
 				">>> Mixer GUI started".postln;
 			}.defer;  // run whole block on AppClock
+		};
+
+		0.4.wait;
+
+		~startGuiUpdater.();
+
+		// Start the patterns
+		if(~makePatterns.notNil) {
+			~makePatterns.();
+			"[Conductor] Patterns created."
 		};
 
 		if(Pdef(\ambgen).isPlaying.not) {
@@ -2635,7 +2710,7 @@ Pdef(\ambgen,
 			fades = IdentityDictionary[];
 
 			// fade in chosen instruments
-			active.do { |inst| fades[inst] = rrand(0.08, 0.3) };
+			active.do { |inst| fades[inst] = rrand(0.5, 1) };
 
 			// fade out all others
 			(~layerOn.keys.asArray ++ textures ++ pads ++ arps ++ others).as(Set).do { |inst|
