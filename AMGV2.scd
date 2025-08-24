@@ -277,153 +277,152 @@ SynthDef(\masterFader, { |inBus=0, outBus=0, ctrlBus|
 )
 
 
+(
 // --- Mixer Console GUI ---
 
-(
-var win, rowIndices, channels, soloActive, updateStates, colInstrument, colGroup, colFX, colFxMaster, colMaster, updater;
+~makeMixerGUI = {
+    var win, rowIndices, channels, soloActive, updateStates, colInstrument, colGroup, colFX, colFxMaster, colMaster, updater;
 
-// Colors
-colInstrument = Color(0.9, 0.9, 0.9);  // light grey
-colGroup      = Color(0.7, 0.9, 0.7);  // greenish
-colFX         = Color(0.7, 0.7, 0.9);  // bluish
-colFxMaster   = Color(0.6, 0.8, 0.9);  // light blue
-colMaster     = Color(1, 0.6, 0.2);    // orange
+    // Colors
+    colInstrument = Color(0.9, 0.9, 0.9);  // light grey
+    colGroup      = Color(0.7, 0.9, 0.7);  // greenish
+    colFX         = Color(0.7, 0.7, 0.9);  // bluish
+    colFxMaster   = Color(0.6, 0.8, 0.9);  // light blue
+    colMaster     = Color(1, 0.6, 0.2);    // orange
 
-// Channel definitions
-channels = [
-    // Instrument level
-    (name: \Pad,         color: colInstrument, type: \instrument, ctrlBus: ~padCtrl),
-    (name: \DarkPad,     color: colInstrument, type: \instrument, ctrlBus: ~darkPadCtrl),
-    (name: \Bass,        color: colInstrument, type: \instrument, ctrlBus: ~bassCtrl),
-    (name: \Drone,       color: colInstrument, type: \instrument, ctrlBus: ~droneCtrl),
-    (name: \Bell,        color: colInstrument, type: \instrument, ctrlBus: ~bellCtrl),
-    (name: \HarpArp,     color: colInstrument, type: \instrument, ctrlBus: ~harpCtrl),
-    (name: \GlassArp,    color: colInstrument, type: \instrument, ctrlBus: ~glassCtrl),
-    (name: \SeaTex,      color: colInstrument, type: \instrument, ctrlBus: ~seaCtrl),
-    (name: \RainTex,     color: colInstrument, type: \instrument, ctrlBus: ~rainCtrl),
-    (name: \VinylTex,    color: colInstrument, type: \instrument, ctrlBus: ~vinylCtrl),
+    // Channel definitions (map to control buses)
+    channels = [
+        // Instruments
+        (name: \Pad,         color: colInstrument, type: \instrument, ctrlBus: ~padCtrl),
+        (name: \DarkPad,     color: colInstrument, type: \instrument, ctrlBus: ~darkPadCtrl),
+        (name: \Bass,        color: colInstrument, type: \instrument, ctrlBus: ~bassCtrl),
+        (name: \Drone,       color: colInstrument, type: \instrument, ctrlBus: ~droneCtrl),
+        (name: \Bell,        color: colInstrument, type: \instrument, ctrlBus: ~bellCtrl),
+        (name: \HarpArp,     color: colInstrument, type: \instrument, ctrlBus: ~harpCtrl),
+        (name: \GlassArp,    color: colInstrument, type: \instrument, ctrlBus: ~glassCtrl),
+        (name: \SeaTex,      color: colInstrument, type: \instrument, ctrlBus: ~seaCtrl),
+        (name: \RainTex,     color: colInstrument, type: \instrument, ctrlBus: ~rainCtrl),
+        (name: \VinylTex,    color: colInstrument, type: \instrument, ctrlBus: ~vinylCtrl),
 
-    // Group level
-    (name: \PadGroup,    color: colGroup,      type: \group,      ctrlBus: ~padGroupCtrl),
-    (name: \BassGroup,   color: colGroup,      type: \group,      ctrlBus: ~bassGroupCtrl),
-    (name: \DroneGroup,  color: colGroup,      type: \group,      ctrlBus: ~droneGroupCtrl),
-    (name: \BellGroup,   color: colGroup,      type: \group,      ctrlBus: ~bellGroupCtrl),
-    (name: \ArpGroup,    color: colGroup,      type: \group,      ctrlBus: ~arpGroupCtrl),
-    (name: \TexGroup,    color: colGroup,      type: \group,      ctrlBus: ~texGroupCtrl),
+        // Groups
+        (name: \PadGroup,    color: colGroup,      type: \group,      ctrlBus: ~padGroupCtrl),
+        (name: \BassGroup,   color: colGroup,      type: \group,      ctrlBus: ~bassGroupCtrl),
+        (name: \DroneGroup,  color: colGroup,      type: \group,      ctrlBus: ~droneGroupCtrl),
+        (name: \BellGroup,   color: colGroup,      type: \group,      ctrlBus: ~bellGroupCtrl),
+        (name: \ArpGroup,    color: colGroup,      type: \group,      ctrlBus: ~arpGroupCtrl),
+        (name: \TexGroup,    color: colGroup,      type: \group,      ctrlBus: ~texGroupCtrl),
 
-    // FX return level
-    (name: \ReverbFX,    color: colFX,         type: \fx,         ctrlBus: ~revCtrl),
-    (name: \CompFX,      color: colFX,         type: \fx,         ctrlBus: ~compCtrl),
-    (name: \DelayFX,     color: colFX,         type: \fx,         ctrlBus: ~delCtrl),
-    (name: \SaturatorFX, color: colFX,         type: \fx,         ctrlBus: ~satCtrl),
+        // FX
+        (name: \ReverbFX,    color: colFX,         type: \fx,         ctrlBus: ~revCtrl),
+        (name: \CompFX,      color: colFX,         type: \fx,         ctrlBus: ~compCtrl),
+        (name: \DelayFX,     color: colFX,         type: \fx,         ctrlBus: ~delCtrl),
+        (name: \SaturatorFX, color: colFX,         type: \fx,         ctrlBus: ~satCtrl),
 
-    // Master
-    (name: \FXMaster,    color: colFxMaster,   type: \fx,         ctrlBus: ~fxGroupCtrl),
-    (name: \Master,      color: colMaster,     type: \master,     ctrlBus: ~masterCtrl)
-];
+        // Master
+        (name: \FXMaster,    color: colFxMaster,   type: \fx,         ctrlBus: ~fxGroupCtrl),
+        (name: \Master,      color: colMaster,     type: \master,     ctrlBus: ~masterCtrl)
+    ];
 
-// Solo handling
-soloActive = false;
+    // Solo handling (placeholder, expand if needed)
+    soloActive = false;
 
-~drySends = IdentityDictionary[
-    \PadGroup   -> ~padDryCtrl,
-    \BassGroup  -> ~bassDryCtrl,
-    \DroneGroup -> ~droneDryCtrl,
-    \BellGroup  -> ~bellDryCtrl,
-    \ArpGroup   -> ~arpDryCtrl,
-    \TexGroup   -> ~texDryCtrl
-];
+    ~drySends = IdentityDictionary[
+        \PadGroup   -> ~padDryCtrl,
+        \BassGroup  -> ~bassDryCtrl,
+        \DroneGroup -> ~droneDryCtrl,
+        \BellGroup  -> ~bellDryCtrl,
+        \ArpGroup   -> ~arpDryCtrl,
+        \TexGroup   -> ~texDryCtrl
+    ];
 
-// GUI window
-win = Window("AMBIENT MUSIC GENERATOR Mixer", Rect(50, 50, channels.size * 100, 820)).front;
+    // Create window
+    win = Window("AMBIENT MUSIC GENERATOR Mixer", Rect(50, 50, channels.size * 100, 820)).front;
 
-// Counters for xOffset
-rowIndices = IdentityDictionary[
-    \instrument -> 0,
-    \group      -> 0,
-    \fx         -> 0
-];
+    // Track row indices for x positioning
+    rowIndices = IdentityDictionary[
+        \instrument -> 0,
+        \group      -> 0,
+        \fx         -> 0
+    ];
 
-// Build channels
-channels.do { |c, i|
-    var name = c[\name], color = c[\color], type = c[\type], ctrlBus = c[\ctrlBus];
-    var slider, muteBtn, soloBtn, label, yOffset, xOffset, actionFunc;
+    // Build channels
+    channels.do { |c, i|
+        var name = c[\name], color = c[\color], type = c[\type], ctrlBus = c[\ctrlBus];
+        var slider, muteBtn, soloBtn, label, yOffset, xOffset, actionFunc;
 
-    // row-specific yOffset
-    yOffset = switch(type,
-        \instrument, { 50 },
-        \group,      { 300 },
-        \fx,         { 550 },
-        \master,     { 550 },
-        { 50 }
-    );
+        // row-specific yOffset
+        yOffset = switch(type,
+            \instrument, { 50 },
+            \group,      { 300 },
+            \fx,         { 550 },
+            \master,     { 550 },
+            { 50 }
+        );
 
-    // row-specific xOffset
-    if(type == \master) {
-        xOffset = rowIndices[\fx] * 100 + 50;
-    } {
-        xOffset = rowIndices[type] * 100 + 50;
-        rowIndices[type] = rowIndices[type] + 1;
-    };
+        // row-specific xOffset
+        if(type == \master) {
+            xOffset = rowIndices[\fx] * 100 + 50;
+        } {
+            xOffset = rowIndices[type] * 100 + 50;
+            rowIndices[type] = rowIndices[type] + 1;
+        };
 
-    // Slider
-    actionFunc = { |sl| ctrlBus.set(sl.value); updateStates.() };
-    slider = Slider(win, Rect(xOffset, yOffset, 30, 150))
-        .background_(color)
-        .value_(ctrlBus.getSynchronous)
-        .action_(actionFunc);
+        // Slider
+        actionFunc = { |sl| ctrlBus.set(sl.value) };
+        slider = Slider(win, Rect(xOffset, yOffset, 30, 150))
+            .background_(color)
+            .value_(ctrlBus.getSynchronous)
+            .action_(actionFunc);
 
-    // Mute Button
-    if(type == \master) {
-        muteBtn = Button(win, Rect(xOffset + 2, yOffset + 160, 25, 20))
-        .states_([["M", Color.black, Color(1,0.3,0.3)], ["M", Color.white, Color.red]])
-        .action_({ updateStates.() });
-    } {
+        // Mute button
         muteBtn = Button(win, Rect(xOffset - 10, yOffset + 160, 25, 20))
-        .states_([["M", Color.black, Color(1,0.3,0.3)], ["M", Color.white, Color.red]])
-        .action_({ updateStates.() });
+            .states_([["M", Color.black, Color(1,0.3,0.3)], ["M", Color.white, Color.red]]);
+
+        // Solo button (not for master)
+        if(type != \master) {
+            soloBtn = Button(win, Rect(xOffset + 20, yOffset + 160, 25, 20))
+                .states_([["S", Color.black, Color(0.7,0.7,1)], ["S", Color.white, Color.blue]]);
+            channels[i][\solo] = soloBtn;
+        };
+
+        // Label
+        label = StaticText(win, Rect(xOffset - 10, yOffset + 185, 70, 20))
+            .align_(\center)
+            .string_(name.asString);
+
+        // Store refs
+        channels[i][\slider] = slider;
+        channels[i][\mute]   = muteBtn;
+        channels[i][\action] = actionFunc;
     };
 
-    // Solo Button
-    if(type != \master) {
-        soloBtn = Button(win, Rect(xOffset + 20, yOffset + 160, 25, 20))
-            .states_([["S", Color.black, Color(0.7,0.7,1)], ["S", Color.white, Color.blue]])
-            .action_({ updateStates.() });
-        channels[i][\solo] = soloBtn;
+    // Updater: refresh sliders from control buses
+    if(~guiUpdater.notNil and: { ~guiUpdater.isPlaying }) {
+        ~guiUpdater.stop;
     };
 
-    // Label
-    label = StaticText(win, Rect(xOffset - 10, yOffset + 185, 70, 20))
-        .align_(\center)
-        .string_(name.asString);
-
-    // Store GUI objects into the real channel dict
-    channels[i][\slider] = slider;
-    channels[i][\mute]   = muteBtn;
-    channels[i][\action] = actionFunc; // save original action
-};
-
-// updater: refresh sliders from bus values
-updater = Routine({
-    loop {
-        channels.do { |c|
-            if(c[\ctrlBus].notNil and: { c[\slider].notNil }) {
-                c[\ctrlBus].get { |val|
-                    {
-                        if(c[\slider].notNil) {
-                            // temporarily disable action
-                            var oldAction = c[\slider].action;
-                            c[\slider].action = nil;
-                            c[\slider].value = val;
-                            c[\slider].action = oldAction; // restore
-                        };
-                    }.defer;
+    ~guiUpdater = Routine({
+        loop {
+            channels.do { |c|
+                if(c[\ctrlBus].notNil and: { c[\slider].notNil }) {
+                    c[\ctrlBus].get { |val|
+                        {
+                            if(c[\slider].notNil) {
+                                var oldAction = c[\slider].action;
+                                c[\slider].action = nil;
+                                c[\slider].value = val;
+                                c[\slider].action = oldAction;
+                            };
+                        }.defer;
+                    };
                 };
             };
+            0.1.wait;
         };
-        0.1.wait; // refresh rate (10 Hz)
-    };
-}).play(AppClock);
+    }).play(AppClock);
+
+    "[MixerGUI] Built & updater started".postln;
+};
 )
 
 
@@ -2436,13 +2435,20 @@ Pdef(\ambgen,
 (
 ~startRoutine.(\conductor, {
     Routine({
-        // start ambgen if not running
+        // 1. start mixer GUI (safe to call multiple times)
+        if(~makeMixerGUI.notNil) {
+            ~makeMixerGUI.();
+        } {
+			"[Conductor] WARNING: ~makeMixerGUI not defined yet!".warn;
+        };
+
+        // 2. start ambgen if not running
         if(Pdef(\ambgen).isPlaying.not) {
             ">>> Starting ambgen".postln;
             Pdef(\ambgen).play;
         };
 
-        // cycle through scenes
+        // 3. cycle through scenes
         ~scenes.do { |sc|
             ("[Conductor] Queuing scene: " ++ sc[\name]).postln;
             ~nextScene = sc;   // only mark it, don't enter yet
