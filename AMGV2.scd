@@ -280,7 +280,7 @@ SynthDef(\masterFader, { |inBus=0, outBus=0, ctrlBus|
 // --- Mixer Console GUI ---
 
 (
-var win, rowIndices, channels, soloActive, updateStates, colInstrument, colGroup, colFX, colFxMaster, colMaster;
+var win, rowIndices, channels, soloActive, updateStates, colInstrument, colGroup, colFX, colFxMaster, colMaster, updater;
 
 // Colors
 colInstrument = Color(0.9, 0.9, 0.9);  // light grey
@@ -290,7 +290,6 @@ colFxMaster   = Color(0.6, 0.8, 0.9);  // light blue
 colMaster     = Color(1, 0.6, 0.2);    // orange
 
 // Channel definitions
-// Each channel is a dictionary with name, synth, color, type, and ctrlBus
 channels = [
     // Instrument level
     (name: \Pad,         color: colInstrument, type: \instrument, ctrlBus: ~padCtrl),
@@ -319,7 +318,7 @@ channels = [
     (name: \SaturatorFX, color: colFX,         type: \fx,         ctrlBus: ~satCtrl),
 
     // Master
-	(name: \FXMaster,    color: colFxMaster,   type: \fx,         ctrlBus: ~fxGroupCtrl),
+    (name: \FXMaster,    color: colFxMaster,   type: \fx,         ctrlBus: ~fxGroupCtrl),
     (name: \Master,      color: colMaster,     type: \master,     ctrlBus: ~masterCtrl)
 ];
 
@@ -335,111 +334,6 @@ soloActive = false;
     \TexGroup   -> ~texDryCtrl
 ];
 
-updateStates = {
-    var soloedInstruments, soloedGroups, soloedFX, fxMasterSolo, soloActive, fxSoloActive;
-
-    // detect soloed channels
-    soloedInstruments = channels.select { |c| c[\type] == \instrument and: { c[\solo].notNil and: { c[\solo].value == 1 } } };
-    soloedGroups      = channels.select { |c| c[\type] == \group      and: { c[\solo].notNil and: { c[\solo].value == 1 } } };
-    soloedFX          = channels.select { |c| c[\type] == \fx and: { c[\name] != \FXMaster } and: { c[\solo].notNil and: { c[\solo].value == 1 } } };
-    fxMasterSolo      = channels.detect { |c| c[\name] == \FXMaster and: { c[\solo].notNil and: { c[\solo].value == 1 } } };
-
-    soloActive      = soloedInstruments.notEmpty or: { soloedGroups.notEmpty or: { soloedFX.notEmpty or: { fxMasterSolo.notNil } } };
-    fxSoloActive    = soloedFX.notEmpty or: { fxMasterSolo.notNil };
-
-    " updateStates triggered ".postln;
-    ("soloedInstruments: " ++ soloedInstruments.collect(_.name)).postln;
-    ("soloedGroups: " ++ soloedGroups.collect(_.name)).postln;
-    ("soloedFX: " ++ soloedFX.collect(_.name)).postln;
-    ("fxMasterSolo: " ++ fxMasterSolo.tryPerform(\name)).postln;
-    ("soloActive? " ++ soloActive).postln;
-    ("fxSoloActive? " ++ fxSoloActive).postln;
-
-    // per-channel handling
-    channels.do { |c|
-        var mute   = (c[\mute].notNil and: { c[\mute].value == 1 });
-        var isSolo = (c[\solo].notNil and: { c[\solo].value == 1 });
-        var val    = (c[\slider].notNil).if({ c[\slider].value }, { 0.5 });
-        var newVal;
-
-        ("--- Channel: " ++ c[\name]).postln;
-        ("mute? " ++ mute ++ " solo? " ++ isSolo ++ " sliderVal: " ++ val).postln;
-
-        if(c[\ctrlBus].notNil) {
-            if(c[\type] == \master) {
-                newVal = if(mute, 0, val);
-                ("[MASTER handling] newVal: " ++ newVal).postln;
-
-            } {
-                if(soloActive) {
-                    if(soloedInstruments.notEmpty) {
-                        ("[Instrument solo active]").postln;
-                        if(c[\type] == \instrument) {
-                            newVal = if(isSolo and: { mute.not }, val, 0);
-						} {
-							newVal = if(mute, 0, val);
-						};
-
-					} {
-						if(soloedGroups.notEmpty) {
-							("[Group solo active]").postln;
-							if(c[\type] == \group) {
-								newVal = if(isSolo and: { mute.not }, val, 0);
-							} {
-								newVal = if(mute, 0, val);
-							};
-
-						} {
-							if(soloedFX.notEmpty) {
-								("[FX solo active]").postln;
-
-								// 1. mute all dry sends
-								~drySends.keysValuesDo { |name, bus| bus.set(0) };
-								("Dry Sends muted (FX solo active): " ++ ~drySends.keys).postln;
-
-								// 2. per-channel logic
-								if(c[\type] == \fx and: { c[\name] != \FXMaster }) {
-									// Only keep soloed FX returns
-									newVal = if(isSolo and: { mute.not }, val, 0);
-								} {
-									if(c[\name] == \FXMaster) {
-										// FXMaster must stay open to pass reverb return!
-										newVal = if(mute.not, val, 0);
-									} {
-										newVal = if(mute, 0, val); // instruments & groups: normal mute logic
-									};
-								};
-							} {
-								if(fxMasterSolo.notNil) {
-									("[FX Master solo active]").postln;
-
-									// Mute all dry sends
-									~drySends.keysValuesDo { |name, bus| bus.set(0) };
-									("Dry Sends muted (FX Master solo active): " ++ ~drySends.keys).postln;
-
-									// everything else stays untouched
-									newVal = if(mute, 0, val);
-								};
-
-							};
-						};
-					};
-                } {
-                    newVal = if(mute, 0, val);
-                    ("[No solo active]").postln;
-                };
-            };
-
-            // write to bus
-            c[\ctrlBus].set(newVal);
-
-            ("CTRL UPDATE -> " ++ c[\name] ++ " set to " ++ newVal).postln;
-        };
-    };
-
-    " END updateStates ".postln;
-};
-
 // GUI window
 win = Window("AMBIENT MUSIC GENERATOR Mixer", Rect(50, 50, channels.size * 100, 820)).front;
 
@@ -450,9 +344,10 @@ rowIndices = IdentityDictionary[
     \fx         -> 0
 ];
 
+// Build channels
 channels.do { |c, i|
     var name = c[\name], color = c[\color], type = c[\type], ctrlBus = c[\ctrlBus];
-    var slider, muteBtn, soloBtn, label, yOffset, xOffset;
+    var slider, muteBtn, soloBtn, label, yOffset, xOffset, actionFunc;
 
     // row-specific yOffset
     yOffset = switch(type,
@@ -472,26 +367,24 @@ channels.do { |c, i|
     };
 
     // Slider
+    actionFunc = { |sl| ctrlBus.set(sl.value); updateStates.() };
     slider = Slider(win, Rect(xOffset, yOffset, 30, 150))
         .background_(color)
         .value_(ctrlBus.getSynchronous)
-	.action_({ |sl| ctrlBus.set(sl.value); updateStates.() });
+        .action_(actionFunc);
 
-	// Mute Button
-	if(type == \master) {
-		// Centered under slider
-		muteBtn = Button(win, Rect(xOffset + 2, yOffset + 160, 25, 20))
-		.states_([["M", Color.black, Color(1,0.3,0.3)], ["M", Color.white, Color.red]])
-		.action_({ updateStates.() });
-	} {
-		// Default (left-aligned)
-		muteBtn = Button(win, Rect(xOffset - 10, yOffset + 160, 25, 20))
-		.states_([["M", Color.black, Color(1,0.3,0.3)], ["M", Color.white, Color.red]])
-		.action_({ updateStates.() });
-	};
+    // Mute Button
+    if(type == \master) {
+        muteBtn = Button(win, Rect(xOffset + 2, yOffset + 160, 25, 20))
+        .states_([["M", Color.black, Color(1,0.3,0.3)], ["M", Color.white, Color.red]])
+        .action_({ updateStates.() });
+    } {
+        muteBtn = Button(win, Rect(xOffset - 10, yOffset + 160, 25, 20))
+        .states_([["M", Color.black, Color(1,0.3,0.3)], ["M", Color.white, Color.red]])
+        .action_({ updateStates.() });
+    };
 
-
-	// Solo Button (only non-master)
+    // Solo Button
     if(type != \master) {
         soloBtn = Button(win, Rect(xOffset + 20, yOffset + 160, 25, 20))
             .states_([["S", Color.black, Color(0.7,0.7,1)], ["S", Color.white, Color.blue]])
@@ -507,8 +400,32 @@ channels.do { |c, i|
     // Store GUI objects into the real channel dict
     channels[i][\slider] = slider;
     channels[i][\mute]   = muteBtn;
+    channels[i][\action] = actionFunc; // save original action
 };
+
+// updater: refresh sliders from bus values
+updater = Routine({
+    loop {
+        channels.do { |c|
+            if(c[\ctrlBus].notNil and: { c[\slider].notNil }) {
+                c[\ctrlBus].get { |val|
+                    {
+                        if(c[\slider].notNil) {
+                            // temporarily disable action
+                            var oldAction = c[\slider].action;
+                            c[\slider].action = nil;
+                            c[\slider].value = val;
+                            c[\slider].action = oldAction; // restore
+                        };
+                    }.defer;
+                };
+            };
+        };
+        0.1.wait; // refresh rate (10 Hz)
+    };
+}).play(AppClock);
 )
+
 
 (
 // --- Parameter Mapping Engine ---
