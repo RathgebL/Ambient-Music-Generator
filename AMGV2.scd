@@ -400,13 +400,13 @@ rhythmicity from fluid/free to rhythmic/structured -> pulse emphasis
 	droneDetune:  { ~mapExp.(~parameters[\warmth],      0, 1, 0.01, 0.05) },
 	detune:       { ~mapExp.(~parameters[\warmth],      0, 1, 0.01, 0.05) },
 	drive:        { ~mapLin.(~parameters[\warmth],      0, 1, 0.05, 0.5) },
-	humLevel:     { ~mapExp.(~parameters[\warmth],      0, 1, 0.01, 0.05) },
+	humLevel:     { ~mapExp.(~parameters[\warmth],      0, 1, 0.01, 0.03) },
 	lpfFactor:    { ~mapLin.(~parameters[\warmth],      0, 1, 3, 12) },
 	modDepth:     { ~mapLin.(~parameters[\warmth],      0, 1, 1, 500)},
 	noisePink:    { ~mapLin.(~parameters[\warmth],      1, 0, 0.8, 0.2) },
 	noiseWhite:   { ~mapLin.(~parameters[\warmth],      0, 1, 0.2, 0.8) },
 	revDamp:      { ~mapLin.(~parameters[\warmth],      0, 1, 0.2, 0.8) },
-	rumbleLevel:  { ~mapLin.(~parameters[\warmth],      0, 1, 0.0, 0.2) },
+	rumbleLevel:  { ~mapLin.(~parameters[\warmth],      0, 1, 0.0, 0.05) },
 	sub:          { ~mapLin.(~parameters[\warmth],      0, 1, 0.5, 1.0) },
 
 	darkPadCutoff:{ ~mapExp.(~parameters[\brightness],  0, 1, 200, 2000) },
@@ -431,8 +431,8 @@ rhythmicity from fluid/free to rhythmic/structured -> pulse emphasis
 	glassAmp:     { ~mapExp.(~parameters[\density],     0, 1, 0.01, 0.1) },
 	noiseAmp:     { ~mapExp.(~parameters[\density],     0, 1, 0.5, 1) },
 	seaAmp:       { ~mapExp.(~parameters[\density],     0, 1, 0.1, 0.3) },
-	rainAmp:      { ~mapExp.(~parameters[\density],     0, 1, 0.3, 0.6) },
-	vinylAmp:     { ~mapExp.(~parameters[\density],     0, 1, 0.1, 0.3) },
+	rainAmp:      { ~mapExp.(~parameters[\density],     0, 1, 0.3, 0.5) },
+	vinylAmp:     { ~mapExp.(~parameters[\density],     0, 1, 0.1, 0.15) },
 
 	numVoices: {
 		var raw = ~mapLin.(~parameters[\density], 0, 1, 1, 9).round.asInteger;
@@ -1628,7 +1628,7 @@ rhythmicity from fluid/free to rhythmic/structured -> pulse emphasis
 		name: \shimmer, fadeTime: 10, paramTime: 60, dur: 2,
 		scale: \lydianDominant,
 		layersOn: (GlassArp:true, Pad:true, RainTex:true, DarkPad:true, Drone:true, SeaTex:true),
-		targets: (GlassArp:1.0, Pad:0.7, RainTex:1, SeaTex:0, DarkPad:0, Drone:0, DelayFX:0.4, ReverbFX:0.7),
+		targets: (GlassArp:1.0, Pad:0.7, RainTex:0.8, SeaTex:0, DarkPad:0, Drone:0, DelayFX:0.4, ReverbFX:0.7),
 		params: (brightness:0.6, density:0.3, variability:0.35, warmth:0.8, rhythmicity:0.3)
 	),
 
@@ -1642,7 +1642,7 @@ rhythmicity from fluid/free to rhythmic/structured -> pulse emphasis
 	(
 		name: \punctuate, fadeTime: 6, paramTime: 30, dur: 2,
 		layersOn: (Bell:true, HarpArp:true, VinylTex:true, RainTex:true, Bass:true, DarkPad:true),
-		targets: (VinylTex:1.0, Bell:0.7, HarpArp:1.0, Bass:0, DarkPad:0, RainTex:0, Master:1.0, ReverbFX:0.3),
+		targets: (VinylTex:0.5, Bell:0.7, HarpArp:1.0, Bass:0, DarkPad:0, RainTex:0, Master:1.0, ReverbFX:0.3),
 		params: (variability:0.3, density:0.3, rhythmicity:0.2, warmth:0.7)
 	),
 
@@ -2122,7 +2122,7 @@ SynthDef(\seaSynth, { |out = 0, amp = 0.3, waveDepth = 0.4 , pan = 0, sus = 2, a
 }).add;
 
 // Vinyl Crackle
-SynthDef(\vinylCrackle, { |out = 0, amp=0.1, dustDensity=4, lpFreq=4000, hpFreq=800, rumbleLevel=0.1, rumbleFreq=50, humLevel=0.02, wowRate=0.3, wowDepth=0.05|
+SynthDef(\vinylCrackle, { |out = 0, amp=0.1, dustDensity=4, lpFreq=4000, hpFreq=800, rumbleLevel=0.05, rumbleFreq=50, humLevel=0.02, wowRate=0.3, wowDepth=0.05|
 	var trig, env, src, filtered, grainAmp, grainRel, saturated;
 	var rumble, hum, wow, mix, panned;
 
@@ -2305,10 +2305,10 @@ Pdef(\ambgen,
 
 		var chord, dur, durations, padFreqs, padPans, bassFreq;
 
-		// --- Background textures (now Pdefs) ---
-		if(~layerOn[\VinylTex]) { sp.par(Pdef(\vinyl)) };
-		if(~layerOn[\RainTex])  { sp.par(Pdef(\rain))  };
-		if(~layerOn[\SeaTex])   { sp.par(Pdef(\sea))   };
+		// Background textures
+		sp.par(Pdef(\vinyl));
+		sp.par(Pdef(\rain));
+		sp.par(Pdef(\sea));
 
 		loop {
 			chord = ~nextChord.();
