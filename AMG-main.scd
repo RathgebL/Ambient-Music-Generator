@@ -1,21 +1,6 @@
 // ====== Server Utilities (with auto-reboot) ======
 
-(
-s.options.numAudioBusChannels = 512;
-
-// Reboot server, then open GUIs when ready
-s.reboot;
-
-s.waitForBoot({
-	~openMonitors = {
-		s.meter;
-		s.plotTree;
-		s.scope;
-	};
-	~openMonitors.();
-	">>> Server booted and monitors opened.".postln
-});
-)
+"Server-Setup.scd".loadRelative;
 
 
 // ====== Buses ======
