@@ -406,7 +406,7 @@ rhythmicity from fluid/free to rhythmic/structured -> pulse emphasis
 	noisePink:    { ~mapLin.(~parameters[\warmth],      1, 0, 0.8, 0.2) },
 	noiseWhite:   { ~mapLin.(~parameters[\warmth],      0, 1, 0.2, 0.8) },
 	revDamp:      { ~mapLin.(~parameters[\warmth],      0, 1, 0.2, 0.8) },
-	rumbleLevel:  { ~mapLin.(~parameters[\warmth],      0, 1, 0.0, 0.05) },
+	rumbleLevel:  { ~mapLin.(~parameters[\warmth],      0, 1, 0.001, 0.01) },
 	sub:          { ~mapLin.(~parameters[\warmth],      0, 1, 0.5, 1.0) },
 
 	darkPadCutoff:{ ~mapExp.(~parameters[\brightness],  0, 1, 200, 2000) },
@@ -2104,27 +2104,18 @@ SynthDef(\seaSynth, { |out = 0, amp = 0.3, waveDepth = 0.4 , pan = 0, sus = 2, a
 	// Reverb space
 	rev = FreeVerb.ar(filt * env * amp * waveLFO, mix: revMix, room: 0.9, damp: 0.7);
 
-	/*// Debugs
-	Poll.kr(Impulse.kr(2), mod, "seaSynth MOD");
-	Poll.kr(Impulse.kr(2), rq, "seaSynth RQ");
-	Poll.kr(Impulse.kr(2), ffreq, "seaSynth ffreq");
-	Poll.kr(Impulse.kr(2), modDepth, "seaSynth ModDepth");
-	Poll.kr(Impulse.kr(2), modRate, "seaSynth ModRate");
-	Poll.kr(Impulse.kr(2), src, "seaSynth source");
-	Poll.kr(Impulse.kr(2), filt, "seaSynth filt");
-	Poll.kr(Impulse.kr(2), waveLFO, "seaSynth waveLFO");
-	Poll.kr(Impulse.kr(2), env, "seaSynth env");
-	Poll.kr(Impulse.kr(2), amp, "seaSynth amp (arg)");
-	Poll.kr(Impulse.kr(2), rev, "seaSynth rev");*/
-
 	Out.ar(out, Pan2.ar(rev, pan));
 
 }).add;
 
 // Vinyl Crackle
-SynthDef(\vinylCrackle, { |out = 0, amp=0.1, dustDensity=4, lpFreq=4000, hpFreq=800, rumbleLevel=0.05, rumbleFreq=50, humLevel=0.02, wowRate=0.3, wowDepth=0.05|
+SynthDef(\vinylCrackle, { |out = 0, amp=0.1, dustDensity=4, lpFreq=4000, hpFreq=800, rumbleFreq=50, wowRate=0.3, wowDepth=0.05|
 	var trig, env, src, filtered, grainAmp, grainRel, saturated;
-	var rumble, hum, wow, mix, panned;
+	var rumble, hum, rumbleLevel, humLevel, wow, mix, panned;
+
+	// Live parameters from buses
+	rumbleLevel = In.kr(~paramBuses[\rumbleLevel]);
+	humLevel    = In.kr(~paramBuses[\humLevel]);
 
 	// Crackles
 	trig = Dust.kr(dustDensity);
@@ -2248,10 +2239,7 @@ SynthDef(\fade, { |bus, start = 0, end = 1, dur = 8, curve = -0.5|
 			},
 
 			// synthesis params
-			\ffreq,       1500,
-			\rq,          0.7,
 			\waveDepth,   Pfunc({ ~mapLin.(~parameters[\density], 0, 1, 0.1, 0.6) }),
-			\waveRate,    Pfunc({ ~mapLin.(~parameters[\variability], 0, 1, 0.02, 0.08) }),
 			\pan,         Pwhite(-1.0, 1.0),
 			\amp,         Pfunc({ ~getMapped.(\seaAmp) }),
 			\out,         ~seaBus
@@ -2270,8 +2258,6 @@ SynthDef(\fade, { |bus, start = 0, end = 1, dur = 8, curve = -0.5|
 			}),
 			\lpFreq,       Pwhite(2000, 5000),
 			\hpFreq,       Pwhite(500, 1500),
-			\humLevel,     Pfunc({ ~getMapped.(\humLevel) }),
-			\rumbleLevel,  Pfunc({ ~getMapped.(\rumbleLevel) }),
 			\amp,          Pfunc({ ~getMapped.(\vinylAmp) }),
 			\out,          ~vinylBus
 		)
@@ -2285,7 +2271,6 @@ SynthDef(\fade, { |bus, start = 0, end = 1, dur = 8, curve = -0.5|
 			\densFactor, Pfunc({ ~mapLin.(~parameters[\variability], 0, 1, 1, 2) }),
 			\hp,         Pfunc({ ~mapLin.(~parameters[\brightness], 0, 1, 200, 2000) }),
 			\lp,         Pfunc({ ~mapLin.(~parameters[\brightness], 0, 1, 3000, 8000) }),
-			\revMix,     Pfunc({ ~getMapped.(\revMix) }),
 			\amp,        Pfunc({ ~getMapped.(\rainAmp) }),
 			\out,        ~rainBus
 		)
