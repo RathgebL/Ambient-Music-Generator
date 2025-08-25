@@ -1,6 +1,6 @@
-// --- Markov second order harmony (degrees 1..7) ---
-
 (
+// --- Markov second order harmony ---
+
 ~degreeMarkov2 = (
 	11: [[2,0.3],[3,0.3],[4,0.3],[5,0.1]],
 	12: [[3,0.3],[4,0.4],[6,0.3]],
