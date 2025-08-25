@@ -36,75 +36,46 @@ s.waitForBoot({
     if(~busesAllocated.not) {
         "Allocating buses...".postln;
 
-	// Audio Buses
-	~masterBus       = Bus.audio(s, 2);
+        // --- Names grouped by type ---
+        var audioNames = [
+            \master,
 
-	~padBus          = Bus.audio(s, 2);
-	~darkPadBus      = Bus.audio(s, 2);
-	~bassBus         = Bus.audio(s, 2);
-	~droneBus        = Bus.audio(s, 2);
-	~harpBus         = Bus.audio(s, 2);
-	~glassBus        = Bus.audio(s, 2);
-	~bellBus         = Bus.audio(s, 2);
-	~seaBus          = Bus.audio(s, 2);
-	~rainBus         = Bus.audio(s, 2);
-	~vinylBus        = Bus.audio(s, 2);
+            \pad, \darkPad, \bass, \drone, \harp, \glass, \bell, \sea, \rain, \vinyl,
 
-	~revBus          = Bus.audio(s, 2);
-	~compBus         = Bus.audio(s, 2);
-	~delBus          = Bus.audio(s, 2);
-	~satBus          = Bus.audio(s, 2);
+            \rev, \comp, \del, \sat,
 
-	~padGroupBus     = Bus.audio(s, 2);
-	~bassGroupBus    = Bus.audio(s, 2);
-	~droneGroupBus   = Bus.audio(s, 2);
-	~bellGroupBus    = Bus.audio(s, 2);
-	~arpGroupBus     = Bus.audio(s, 2);
-	~texGroupBus     = Bus.audio(s, 2);
-	~fxGroup         = Bus.audio(s, 2);
+            \padGroup, \bassGroup, \droneGroup, \bellGroup, \arpGroup, \texGroup, \fxGroup,
 
-	~padDryBus       = Bus.audio(s, 2);
-	~bassDryBus      = Bus.audio(s, 2);
-	~droneDryBus     = Bus.audio(s, 2);
-	~bellDryBus      = Bus.audio(s, 2);
-	~arpDryBus       = Bus.audio(s, 2);
-	~texDryBus       = Bus.audio(s, 2);
+            \padDry, \bassDry, \droneDry, \bellDry, \arpDry, \texDry
+        ];
 
-	// Control Buses
-	~masterCtrl      = Bus.control(s, 1).set(1);
+        var controlNames = [
+            \master,
 
-	~padCtrl         = Bus.control(s, 1).set(0.5);
-	~darkPadCtrl     = Bus.control(s, 1).set(0.5);
-	~bassCtrl        = Bus.control(s, 1).set(0.5);
-	~droneCtrl       = Bus.control(s, 1).set(0.5);
-	~bellCtrl        = Bus.control(s, 1).set(0.5);
-	~harpCtrl        = Bus.control(s, 1).set(0.5);
-	~glassCtrl       = Bus.control(s, 1).set(0.5);
-	~seaCtrl         = Bus.control(s, 1).set(0.5);
-	~rainCtrl        = Bus.control(s, 1).set(0.5);
-	~vinylCtrl       = Bus.control(s, 1).set(0.5);
+            \pad, \darkPad, \bass, \drone, \bell, \harp, \glass, \sea, \rain, \vinyl,
 
-	~revCtrl         = Bus.control(s, 1).set(1);
-	~compCtrl        = Bus.control(s, 1).set(1);
-	~delCtrl         = Bus.control(s, 1).set(1);
-	~satCtrl         = Bus.control(s, 1).set(1);
+            \rev, \comp, \del, \sat,
 
-	~padGroupCtrl    = Bus.control(s, 1).set(1);
-	~bassGroupCtrl   = Bus.control(s, 1).set(1);
-	~droneGroupCtrl  = Bus.control(s, 1).set(1);
-	~bellGroupCtrl   = Bus.control(s, 1).set(1);
-	~arpGroupCtrl    = Bus.control(s, 1).set(1);
-	~texGroupCtrl    = Bus.control(s, 1).set(1);
-	~fxGroupCtrl     = Bus.control(s, 1).set(1);
+            \padGroup, \bassGroup, \droneGroup, \bellGroup, \arpGroup, \texGroup, \fxGroup,
 
-	~padDryCtrl      = Bus.control(s, 1).set(1);
-	~bassDryCtrl     = Bus.control(s, 1).set(1);
-	~droneDryCtrl    = Bus.control(s, 1).set(1);
-	~bellDryCtrl     = Bus.control(s, 1).set(1);
-	~arpDryCtrl      = Bus.control(s, 1).set(1);
-	~texDryCtrl      = Bus.control(s, 1).set(1);
+            \padDry, \bassDry, \droneDry, \bellDry, \arpDry, \texDry
+        ];
 
-	~busesAllocated = true; // mark as done
+        // --- Audio buses ---
+        audioNames.do { |name|
+            var busName = (name.asString ++ "Bus").asSymbol;
+            ~[busName] = Bus.audio(s, 2);
+        };
+
+        // --- Control buses ---
+        controlNames.do { |name|
+            var ctrlName = (name.asString ++ "Ctrl").asSymbol;
+            // Different defaults: master=1, others vary
+            var initVal = if(name == \master) { 1 } { 0.5 };
+            ~[ctrlName] = Bus.control(s, 1).set(initVal);
+        };
+
+        ~busesAllocated = true;
     } {
         "Buses already allocated, skipping.".postln;
     };
@@ -1642,7 +1613,7 @@ rhythmicity from fluid/free to rhythmic/structured -> pulse emphasis
 	(
 		name: \punctuate, fadeTime: 6, paramTime: 30, dur: 2,
 		layersOn: (Bell:true, HarpArp:true, VinylTex:true, RainTex:true, Bass:true, DarkPad:true),
-		targets: (VinylTex:0.5, Bell:0.7, HarpArp:1.0, Bass:0, DarkPad:0, RainTex:0, Master:1.0, ReverbFX:0.3),
+		targets: (VinylTex:0.3, Bell:0.7, HarpArp:1.0, Bass:0, DarkPad:0, RainTex:0, Master:1.0, ReverbFX:0.3),
 		params: (variability:0.3, density:0.3, rhythmicity:0.2, warmth:0.7)
 	),
 
