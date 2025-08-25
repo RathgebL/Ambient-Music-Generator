@@ -34,10 +34,13 @@ s.waitForBoot({
 (
 ~allocBuses = {
     if(~busesAllocated.not) {
+		var audioNames, controlNames;
+
         "Allocating buses...".postln;
 
+
         // --- Names grouped by type ---
-        var audioNames = [
+        audioNames = [
             \master,
 
             \pad, \darkPad, \bass, \drone, \harp, \glass, \bell, \sea, \rain, \vinyl,
@@ -49,7 +52,7 @@ s.waitForBoot({
             \padDry, \bassDry, \droneDry, \bellDry, \arpDry, \texDry
         ];
 
-        var controlNames = [
+        controlNames = [
             \master,
 
             \pad, \darkPad, \bass, \drone, \bell, \harp, \glass, \sea, \rain, \vinyl,
@@ -64,15 +67,14 @@ s.waitForBoot({
         // --- Audio buses ---
         audioNames.do { |name|
             var busName = (name.asString ++ "Bus").asSymbol;
-            ~[busName] = Bus.audio(s, 2);
+            currentEnvironment.put(busName, Bus.audio(s, 2));
         };
 
         // --- Control buses ---
         controlNames.do { |name|
             var ctrlName = (name.asString ++ "Ctrl").asSymbol;
-            // Different defaults: master=1, others vary
             var initVal = if(name == \master) { 1 } { 0.5 };
-            ~[ctrlName] = Bus.control(s, 1).set(initVal);
+            currentEnvironment.put(ctrlName, Bus.control(s, 1).set(initVal));
         };
 
         ~busesAllocated = true;
@@ -403,7 +405,7 @@ rhythmicity from fluid/free to rhythmic/structured -> pulse emphasis
 	noiseAmp:     { ~mapExp.(~parameters[\density],     0, 1, 0.5, 1) },
 	seaAmp:       { ~mapExp.(~parameters[\density],     0, 1, 0.1, 0.3) },
 	rainAmp:      { ~mapExp.(~parameters[\density],     0, 1, 0.3, 0.5) },
-	vinylAmp:     { ~mapExp.(~parameters[\density],     0, 1, 0.1, 0.15) },
+	vinylAmp:     { ~mapExp.(~parameters[\density],     0, 1, 0.05, 0.1) },
 
 	numVoices: {
 		var raw = ~mapLin.(~parameters[\density], 0, 1, 1, 9).round.asInteger;
@@ -1581,7 +1583,7 @@ rhythmicity from fluid/free to rhythmic/structured -> pulse emphasis
 
 ~scores = [
 	(
-		name: \intro, fadeTime: 10, paramTime: 40, dur: 2,
+		name: \intro, fadeTime: 10, paramTime: 40, dur: 4,
 		key: [\D, 3], scale: \yo,
 		layersOn: (SeaTex:true, Drone:true, Pad:false, DarkPad:false, Bass:false, HarpArp:false, GlassArp:false, Bell:false, RainTex:true, VinylTex:true),
 		targets: (SeaTex:1.0, Drone:1.0, DarkPad:0, Pad:0, Bass:0, Bell:0, HarpArp:0, GlassArp:0, Bell:0, RainTex:0.01, VinylTex:0.01, Master:1.0, FXMaster:0.85, ReverbFX:0.6, DelayFX:0.2),
@@ -1589,14 +1591,14 @@ rhythmicity from fluid/free to rhythmic/structured -> pulse emphasis
 	),
 
 	(
-		name: \firstPads, fadeTime: 12, paramTime: 60, dur: 2,
+		name: \firstPads, fadeTime: 12, paramTime: 60, dur: 8,
 		layersOn: (DarkPad:true, Drone:true, SeaTex:true),
 		targets: (DarkPad:1.0, Drone:0.7, SeaTex:0.8, Master:1.0, ReverbFX:0.50, DelayFX:0.30),
 		params: (warmth:0.3, brightness:0.45, density:0.3, variability:0.3, rhythmicity:0.5)
 	),
 
 	(
-		name: \shimmer, fadeTime: 10, paramTime: 60, dur: 2,
+		name: \shimmer, fadeTime: 10, paramTime: 60, dur: 6,
 		scale: \lydianDominant,
 		layersOn: (GlassArp:true, Pad:true, RainTex:true, DarkPad:true, Drone:true, SeaTex:true),
 		targets: (GlassArp:1.0, Pad:0.7, RainTex:0.8, SeaTex:0, DarkPad:0, Drone:0, DelayFX:0.4, ReverbFX:0.7),
@@ -1604,21 +1606,21 @@ rhythmicity from fluid/free to rhythmic/structured -> pulse emphasis
 	),
 
 	(
-		name: \ground, fadeTime: 16, paramTime: 70, dur: 2,
+		name: \ground, fadeTime: 16, paramTime: 70, dur: 12,
 		layersOn: (Bass:true, DarkPad:true, RainTex:true, GlassArp:true, Pad:true, Drone:false, SeaTex:false),
 		targets: (Bass:0.6, DarkPad:1.0, RainTex:0.6, GlassArp:0, Pad:0, Master:1.0, DelayFX:0.1, SaturatorFX:0.5),
 		params: (warmth:0.5, brightness:0.5, density:0.38, rhythmicity:0.7)
 	),
 
 	(
-		name: \punctuate, fadeTime: 6, paramTime: 30, dur: 2,
+		name: \punctuate, fadeTime: 6, paramTime: 30, dur: 6,
 		layersOn: (Bell:true, HarpArp:true, VinylTex:true, RainTex:true, Bass:true, DarkPad:true),
-		targets: (VinylTex:0.3, Bell:0.7, HarpArp:1.0, Bass:0, DarkPad:0, RainTex:0, Master:1.0, ReverbFX:0.3),
+		targets: (VinylTex:0.8, Bell:0.7, HarpArp:1.0, Bass:0, DarkPad:0, RainTex:0, Master:1.0, ReverbFX:0.3),
 		params: (variability:0.3, density:0.3, rhythmicity:0.2, warmth:0.7)
 	),
 
 	(
-		name: \exhale, fadeTime: 12, paramTime: 60, dur: 2,
+		name: \exhale, fadeTime: 12, paramTime: 60, dur: 8,
 		scale: \inSen,
 		layersOn: (Pad:true, Drone:true, Bass:true, VinylTex:true, RainTex:false, Bass:false, DarkPad:false),
 		targets: (Bass:0.5, Pad:1.0, Drone:1.0, Master:1.0, DelayFX:0.2, ReverbFX:0.8),
@@ -2080,7 +2082,7 @@ SynthDef(\seaSynth, { |out = 0, amp = 0.3, waveDepth = 0.4 , pan = 0, sus = 2, a
 }).add;
 
 // Vinyl Crackle
-SynthDef(\vinylCrackle, { |out = 0, amp=0.1, dustDensity=4, lpFreq=4000, hpFreq=800, rumbleFreq=50, wowRate=0.3, wowDepth=0.05|
+SynthDef(\vinylCrackle, { |out = 0, amp=0.1, dustDensity=4, lpFreq=4000, hpFreq=800, rumbleFreq=50, wowRate=0.33, wowDepth=0.1|
 	var trig, env, src, filtered, grainAmp, grainRel, saturated;
 	var rumble, hum, rumbleLevel, humLevel, wow, mix, panned;
 
@@ -2101,7 +2103,7 @@ SynthDef(\vinylCrackle, { |out = 0, amp=0.1, dustDensity=4, lpFreq=4000, hpFreq=
 	rumble = LPF.ar(BrownNoise.ar(rumbleLevel), rumbleFreq);
 
 	// Electrical hum (fundamental + harmonics)
-	hum = (SinOsc.ar(50) + 0.5 * SinOsc.ar(100) + 0.25 * SinOsc.ar(150)) * humLevel;
+	hum = (SinOsc.ar(50) + 0.5 * SinOsc.ar(100) + 0.25 * SinOsc.ar(150)) * humLevel * 0.08;
 
 	// Wow/flutter (slow amplitude wobble)
 	wow = SinOsc.kr(wowRate, 0, wowDepth, 1);
