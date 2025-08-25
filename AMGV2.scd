@@ -311,7 +311,6 @@ s.waitForBoot({
 };
 
 
-
 // --- Parameter Mapping Engine ---
 
 /*
@@ -423,7 +422,6 @@ rhythmicity from fluid/free to rhythmic/structured -> pulse emphasis
 	}
 );
 
-
 // Init buses once per mapping
 ~paramBuses = IdentityDictionary.new;
 ~parameterMappings.keysDo { |key|
@@ -467,7 +465,6 @@ rhythmicity from fluid/free to rhythmic/structured -> pulse emphasis
 
 // Run update bus function
 ~paramUpdater = ~updateParamBuses.();
-
 
 // Quick set (safe)
 ~setParam = { |key, val|
@@ -558,7 +555,6 @@ rhythmicity from fluid/free to rhythmic/structured -> pulse emphasis
 	neapolitan:  [0,1,3,5,7,8,11], // Neapolitan minor
 	enigmatic:   [0,1,4,6,8,10,11] // mysterious modern scale
 );
-
 
 // note names just for convenience
 ~noteNames = (C:0, Cis:1, Des:1, D:2, Dis:3, Es:3, E:4, F:5, Fis:6, Ges:6, G:7, Gis:8, As:8, A:9, Ais:10, B:10, H:11);
@@ -1102,7 +1098,9 @@ rhythmicity from fluid/free to rhythmic/structured -> pulse emphasis
 	66: [[6,0.2],[5,0.25],[4,0.25],[2,0.2],[1,0.1]]
 );
 
+
 // --- Second-order Markov for ambient octatonic (degrees 1..8) ---
+
 ~degreeMarkov2Oct = (
 
 	// From I (1)
@@ -1186,6 +1184,7 @@ rhythmicity from fluid/free to rhythmic/structured -> pulse emphasis
 	88: [[8,0.15],[7,0.2],[1,0.2],[6,0.1],[2,0.1],[4,0.15]]
 );
 
+// Function to choose a Markov table
 ~chooseMarkov = {
 	var n = ~scalePcs.size;
 	var v = ~parameters[\variability];
@@ -1375,7 +1374,8 @@ rhythmicity from fluid/free to rhythmic/structured -> pulse emphasis
 	\Master     -> ~masterCtrl
 ];
 
-// Helper to fade any control bus
+
+// --- Fade Helpers ---
 
 ~busLevels = IdentityDictionary.new;
 
@@ -1494,6 +1494,8 @@ rhythmicity from fluid/free to rhythmic/structured -> pulse emphasis
 	}).start;
 };
 
+
+// --- Score Helpers ---
 ~normalizeScore = { |score|
 	var val, dict;
 	if(score.isNil) { ^IdentityDictionary[] };
@@ -2530,7 +2532,7 @@ Pdef(\ambgen,
 ~stopRoutine.(\conductor);
 
 
-// --- FreePlayer to play improvised ambient music (with automatic scale and instrument changes)
+// --- FreePlayer to play improvised ambient music (with automatic scale and instrument changes) ---
 
 (
 
