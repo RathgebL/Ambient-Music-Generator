@@ -73,8 +73,4 @@
 
 "Conductor.scd".loadRelative;
 
-~stopRoutine.(\conductor);
-
 "FreePlayer.scd".loadRelative
-
-~stopRoutine.(\freePlayer);

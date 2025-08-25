@@ -125,6 +125,8 @@
 	if(~guiUpdater.notNil and: { ~guiUpdater.isPlaying }) {
 		~guiUpdater.stop;
 	};
+
+	win // Return win to be able to close it automatically
 };
 
 // --- GUI Updater ---

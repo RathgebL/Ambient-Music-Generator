@@ -126,4 +126,26 @@
 		("[Routine] Not running: " ++ name).postln;
 	};
 };
+
+~restartStoper = {
+	CmdPeriod.doOnce({		
+		// Stop your routines/players safely
+		~stopRoutine.(\conductor);
+		~stopRoutine.(\freePlayer);
+		
+		// Stop GUI updater if running
+		if(~guiUpdater.notNil and: { ~guiUpdater.isPlaying }) {
+			~guiUpdater.stop;
+			"[GUI] Updater stopped".postln;
+		};
+		
+		// Close GUI window if open
+		if(~mainWindow.notNil and: { ~mainWindow.isClosed.not }) {
+			~mainWindow.close;
+			"[GUI] Window closed".postln;
+		};
+		
+		">>> Players and GUI stopped.".postln;
+	});
+};
 )
