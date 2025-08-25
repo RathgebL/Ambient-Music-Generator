@@ -31,7 +31,7 @@
 
 		~startGuiUpdater.();
 
-		~restartStoper.();
+		~restartStopper.();
 
 		// Start the patterns
 		if(~makePatterns.notNil) {

@@ -24,7 +24,7 @@
 		// Start mixer GUI (safe to call multiple times)
 		if(~makeMixerGUI.notNil) {
 			{
-				~makeMixerGUI.();
+				~mainWindow = ~makeMixerGUI.();
 				">>> Mixer GUI started".postln;
 			}.defer;  // run whole block on AppClock
 		};
@@ -32,6 +32,8 @@
 		0.4.wait;
 
 		~startGuiUpdater.();
+
+		~restartStopper.();
 
 		// Start the patterns
 		if(~makePatterns.notNil) {

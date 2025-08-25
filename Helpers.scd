@@ -127,7 +127,7 @@
 	};
 };
 
-~restartStoper = {
+~restartStopper = {
 	CmdPeriod.doOnce({		
 		// Stop your routines/players safely
 		~stopRoutine.(\conductor);
