@@ -1,5 +1,14 @@
 (
-// --- Load Score Helpers ---
+// --- Bus Helper ---
+
+~resetBuses = {
+	s.freeAll;            // frees all synths, groups, and releases buses
+	s.newBusAllocators;   // reset bus allocators
+	"Mixer fully reset.".postln;
+};
+
+
+// --- Score Helpers ---
 
 ~normalizeScore = { |score|
 	var val, dict;
