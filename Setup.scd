@@ -1,39 +1,35 @@
 (
 // ====== Server Utilities (with auto-reboot) ======
+"Server/Server-Setup.scd".loadRelative;
 
-"Server-Setup.scd".loadRelative;
-
-// ====== Everything else waits until boot is complete ======
 s.waitForBoot({
 
     // ====== Buses ======
-    ~resetBuses.();           // Run Helpers first
-    ~busesAllocated = false;  // Run before allocBuses
-    "Buses.scd".loadRelative; // Define allocBuses first
-    ~allocBuses.();           // Call the function
+    ~resetBuses.();
+    ~busesAllocated = false;
+    "Buses/Buses.scd".loadRelative;
+    ~allocBuses.();
 
     // ====== Engines ======
-    "Mixing-Console.scd".loadRelative;
-    "Mixing-Console-GUI.scd".loadRelative;
-    "Parameter.scd".loadRelative;
-    "Harmony.scd".loadRelative;
-    "Control.scd".loadRelative;
+    "Engines/Mixing/Mixing-Console.scd".loadRelative;
+    "Engines/Mixing/Mixing-Console-GUI.scd".loadRelative;
+    "Engines/Parameter/Parameter.scd".loadRelative;
+    "Engines/Harmony/Harmony.scd".loadRelative;
+    "Engines/Control/Control.scd".loadRelative;
 
     // ====== Helpers ======
-    "Helpers.scd".loadRelative;
+    "Helper/Helpers.scd".loadRelative;
 
     // ====== SynthDefs ======
-    "SynthDefs.scd".loadRelative;
+    "Synths/SynthDefs.scd".loadRelative;
     s.sync;
 
     // ====== Pdefs ======
-    "Pdefs.scd".loadRelative;
-
-    // Call and run texture patterns
+    "Patterns/Pdefs.scd".loadRelative;
     ~makeTextures.();
 
     // ====== Scores ======
-    "Scores.scd".loadRelative;
+    "Scores/Scores.scd".loadRelative;
 
     ">>> Full system initialized after server boot.".postln;
 });

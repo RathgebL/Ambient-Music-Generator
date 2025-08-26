@@ -44,7 +44,7 @@ rhythmicity from fluid/free to rhythmic/structured -> pulse emphasis
 };
 
 // load mapped parameters
-"Mappings.scd".loadRelative;
+"Engines/Parameter/Mappings.scd".loadRelative;
 
 // Init buses once per mapping
 ~paramBuses = IdentityDictionary.new;
