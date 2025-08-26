@@ -1,19 +1,26 @@
 (
-// --- Pdefs ---
+// --- Textures ---
 
-~makePatterns = {
+~makeTextures = {
+	[\sea, \vinyl, \rain].do { |name|
+        if(Pdef(name).isPlaying) {
+            Pdef(name).stop;
+            ("[Texture] Stopped old " ++ name).postln;
+        };
+    };
+
 	// Sea
 	Pdef(\sea,
 		Pbind(
-			\instrument, \seaSynth,
-			\legato,      Pwhite(0.95, 1.05),
+        	\instrument, \seaSynth,
+			\legato,    Pwhite(0.95, 1.05),
 
 			// time between waves, in beats
-			\dur,         Pfunc { ~getMapped.(\dur) },
+			\dur,       Pfunc { ~getMapped.(\dur) },
 
 			// envelope shaping (fractions of dur)
-			\atkFrac,     Pwhite(0.1, 0.4),
-			\susFrac,     Pwhite(0.05, 0.2),
+			\atkFrac,   Pwhite(0.1, 0.4),
+			\susFrac,   Pwhite(0.05, 0.2),
 
 			// convert fractions to actual seconds
 			\atk, Pfunc { |ev|
@@ -32,18 +39,17 @@
 			},
 
 			// synthesis params
-			\waveDepth,   Pfunc({ ~mapLin.(~parameters[\density], 0, 1, 0.1, 0.6) }),
-			\pan,         Pwhite(-1.0, 1.0),
-			\amp,         Pfunc({ ~getMapped.(\seaAmp) }),
-			\out,         ~seaBus
+			\waveDepth, Pfunc({ ~mapLin.(~parameters[\density], 0, 1, 0.1, 0.6) }),
+			\pan,       Pwhite(-1.0, 1.0),
+			\amp,       Pfunc({ ~getMapped.(\seaAmp) }),
+			\out,       ~seaBus
 		)
 	);
 
 	// Vinyl
 	Pdef(\vinyl,
-		Pbind(
-			\instrument,   \vinylCrackle,
-			\dur,          Pfunc({ (~getMapped.(\dur) ? 1).max(0.01) }), // safe fallback, never 0/nil
+		Pmono(\vinylCrackle,
+			\dur,          Pfunc({ (~getMapped.(\dur) ? 1).max(0.01) }), // safe fallback
 			\dustDensity,  Pfunc({
 				var lo = 10 - rrand(0, 3);
 				var hi = 20 - rrand(0, 5);
@@ -58,8 +64,7 @@
 
 	// Rain
 	Pdef(\rain,
-		Pbind(
-			\instrument, \rainTexture,
+		Pmono(\rainTexture,
 			\dur,        Pfunc({ ~getMapped.(\dur) }),
 			\densFactor, Pfunc({ ~mapLin.(~parameters[\variability], 0, 1, 1, 2) }),
 			\hp,         Pfunc({ ~mapLin.(~parameters[\brightness], 0, 1, 200, 2000) }),
@@ -69,9 +74,8 @@
 		)
 	);
 
-	"[Patterns] Rebuilt and registered into Pdefs".postln;
+	"[Textures] defined as Pmono".postln;
 };
-
 
 // Generator
 Pdef(\ambgen,
@@ -82,11 +86,6 @@ Pdef(\ambgen,
 		var droneSynths = List[];
 
 		var chord, dur, durations, padFreqs, padPans, bassFreq;
-
-		// Background textures
-		sp.par(Pdef(\vinyl));
-		sp.par(Pdef(\rain));
-		sp.par(Pdef(\sea));
 
 		loop {
 			chord = ~nextChord.();

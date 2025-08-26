@@ -128,24 +128,44 @@
 };
 
 ~restartStopper = {
-	CmdPeriod.doOnce({		
+	CmdPeriod.doOnce({
 		// Stop your routines/players safely
 		~stopRoutine.(\conductor);
 		~stopRoutine.(\freePlayer);
-		
+
 		// Stop GUI updater if running
 		if(~guiUpdater.notNil and: { ~guiUpdater.isPlaying }) {
 			~guiUpdater.stop;
 			"[GUI] Updater stopped".postln;
 		};
-		
+
 		// Close GUI window if open
 		if(~mainWindow.notNil and: { ~mainWindow.isClosed.not }) {
 			~mainWindow.close;
 			"[GUI] Window closed".postln;
 		};
-		
+
 		">>> Players and GUI stopped.".postln;
 	});
+};
+
+// Start all texture synths safely
+~startTextures = {
+    var synthMap = (
+        sea: \seaSynth,
+        vinyl: \vinylCrackle,
+        rain: \rainTexture
+    );
+
+    synthMap.keysValuesDo { |pdefName, synthName|
+        if(SynthDescLib.global.at(synthName).notNil) {
+            if(Pdef(pdefName).isPlaying.not) {
+                Pdef(pdefName).play;
+                ("[Texture] Started " ++ pdefName).postln;
+            };
+        } {
+            ("[Texture] ERROR: SynthDef " ++ synthName ++ " not found!").warn;
+        }
+    };
 };
 )

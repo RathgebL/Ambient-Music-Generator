@@ -17,13 +17,13 @@
 	droneDetune:  { ~mapExp.(~parameters[\warmth],      0, 1, 0.01, 0.05) },
 	detune:       { ~mapExp.(~parameters[\warmth],      0, 1, 0.01, 0.05) },
 	drive:        { ~mapLin.(~parameters[\warmth],      0, 1, 0.05, 0.5) },
-	humLevel:     { ~mapExp.(~parameters[\warmth],      0, 1, 0.01, 0.03) },
+	humLevel:     { ~mapExp.(~parameters[\warmth],      0, 1, 0.05, 0.1) },
 	lpfFactor:    { ~mapLin.(~parameters[\warmth],      0, 1, 3, 12) },
 	modDepth:     { ~mapLin.(~parameters[\warmth],      0, 1, 1, 500)},
 	noisePink:    { ~mapLin.(~parameters[\warmth],      1, 0, 0.8, 0.2) },
 	noiseWhite:   { ~mapLin.(~parameters[\warmth],      0, 1, 0.2, 0.8) },
 	revDamp:      { ~mapLin.(~parameters[\warmth],      0, 1, 0.2, 0.8) },
-	rumbleLevel:  { ~mapLin.(~parameters[\warmth],      0, 1, 0.001, 0.01) },
+	rumbleLevel:  { ~mapLin.(~parameters[\warmth],      0, 1, 0.05, 0.1) },
 	sub:          { ~mapLin.(~parameters[\warmth],      0, 1, 0.5, 1.0) },
 
 	darkPadCutoff:{ ~mapExp.(~parameters[\brightness],  0, 1, 200, 2000) },
@@ -49,7 +49,7 @@
 	noiseAmp:     { ~mapExp.(~parameters[\density],     0, 1, 0.5, 1) },
 	seaAmp:       { ~mapExp.(~parameters[\density],     0, 1, 0.1, 0.3) },
 	rainAmp:      { ~mapExp.(~parameters[\density],     0, 1, 0.3, 0.5) },
-	vinylAmp:     { ~mapExp.(~parameters[\density],     0, 1, 0.05, 0.1) },
+	vinylAmp:     { ~mapExp.(~parameters[\density],     0, 1, 0.1, 0.2) },
 
 	numVoices: {
 		var raw = ~mapLin.(~parameters[\density], 0, 1, 1, 9).round.asInteger;

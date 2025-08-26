@@ -469,7 +469,7 @@ SynthDef(\vinylCrackle, { |out = 0, amp=0.1, dustDensity=4, lpFreq=4000, hpFreq=
 	rumble = LPF.ar(BrownNoise.ar(rumbleLevel), rumbleFreq);
 
 	// Electrical hum (fundamental + harmonics)
-	hum = (SinOsc.ar(50) + 0.5 * SinOsc.ar(100) + 0.25 * SinOsc.ar(150)) * humLevel * 0.08;
+	hum = (SinOsc.ar(50) + 0.5 * SinOsc.ar(100) + 0.25 * SinOsc.ar(150)) * humLevel * 0.05;
 
 	// Wow/flutter (slow amplitude wobble)
 	wow = SinOsc.kr(wowRate, 0, wowDepth, 1);

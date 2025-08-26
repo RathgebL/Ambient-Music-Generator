@@ -34,12 +34,8 @@
 		~startGuiUpdater.();
 
 		~restartStopper.();
-
-		// Start the patterns
-		if(~makePatterns.notNil) {
-			~makePatterns.();
-			"[Conductor] Patterns created."
-		};
+	
+	    ~startTextures.();
 
 		if(Pdef(\ambgen).isPlaying.not) {
 			">>> Starting ambgen".postln;

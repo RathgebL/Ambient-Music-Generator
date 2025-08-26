@@ -24,9 +24,13 @@ s.waitForBoot({
 
     // ====== SynthDefs ======
     "SynthDefs.scd".loadRelative;
+    s.sync;
 
     // ====== Pdefs ======
     "Pdefs.scd".loadRelative;
+
+    // Call and run texture patterns
+    ~makeTextures.();
 
     // ====== Scores ======
     "Scores.scd".loadRelative;
