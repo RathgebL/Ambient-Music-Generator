@@ -28,13 +28,13 @@
 	(
 		name: \ground, fadeTime: 16, paramTime: 70, dur: 12,
 		layersOn: (Bass:true, DarkPad:true, RainTex:true, GlassArp:true, Pad:true, Drone:false, SeaTex:false),
-		targets:  (Bass:0.6, DarkPad:1.0, RainTex:0.6, GlassArp:0, Pad:0, Master:1.0, DelayFX:0.1, SaturatorFX:0.5),
+		targets:  (Bass:0.5, DarkPad:1.0, RainTex:0.6, GlassArp:0, Pad:0, Master:1.0, DelayFX:0.1, SaturatorFX:0.5),
 		params:   (warmth:0.5, brightness:0.5, density:0.38, rhythmicity:0.7)
 	),
 
 	(
 		name: \punctuate, fadeTime: 6, paramTime: 30, dur: 6,
-		layersOn: (Bell:true, HarpArp:true, VinylTex:true, RainTex:true, Bass:true, DarkPad:true, GlassArp:false, Pad:false)
+		layersOn: (Bell:true, HarpArp:true, VinylTex:true, RainTex:true, Bass:true, DarkPad:true, GlassArp:false, Pad:false),
 		targets:  (Bell:0.7, HarpArp:1.0, VinylTex:0.8, RainTex:0, Bass:0, DarkPad:0, Master:1.0, ReverbFX:0.3),
 		params:   (variability:0.3, density:0.3, rhythmicity:0.2, warmth:0.7)
 	),
@@ -43,7 +43,7 @@
 		name: \exhale, fadeTime: 12, paramTime: 60, dur: 8,
 		scale: \inSen,
 		layersOn: (Pad:true, DarkPad:true, Drone:true, Bass:true, HarpArp:true, Bell:true, VinylTex:true, RainTex:false),
-		targets:  (Pad:0.5, DarkPad:0.4, Drone:0.6, Bass:0.5, HarpArp:0, Bell:0.4, Master:1.0, DelayFX:0.2, ReverbFX:0.8),
+		targets:  (Pad:0.5, DarkPad:0.4, Drone:0.6, Bass:0.3, HarpArp:0, Bell:0.4, Master:1.0, DelayFX:0.2, ReverbFX:0.8),
 		params:   (warmth:0.4, brightness:0.35, density:0.2, variability:0.15)
 	)
 ];
