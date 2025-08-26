@@ -1,52 +1,69 @@
-// ─────────────────────────────────────────────────────────── //
-//                                                             //
-//          A  M  B  I  E  N  T         M  U  S  I  C          //
-//                                                             //
-//          G    E    N    E    R    A    T    O    R          //
-//                                                             //
-// ─────────────────────────────────────────────────────────── //
+// ──────────────────────────────────────────────────────────────────────────
+//
+//                   A  M  B  I  E  N  T   M  U  S  I  C
+//
+//                         G  E  N  E  R  A  T  O  R
+//
+// ──────────────────────────────────────────────────────────────────────────
 
-/*
 
-Run the "Setup"" first (Cmd + Enter on the line).
-The setup file contains everything from rebooting to setting up all utilities for the generator.
-This step might take a view seconds. Afterwards you can run a player to generate some ambient music.
-
-For more information, run this line:
-
-*/
+// ==========================================================================
+//                                  SETUP
+// ==========================================================================
+//
+// 1. Run the line below (Cmd + Enter).
+//    This will reboot the server, allocate buses, load all
+//    engines, helpers, SynthDefs, patterns, and scores.
+//
+//    This step can take a few seconds.
+//
+// 2. Once setup is complete, you can choose a player to start
+//    generating ambient music.
+//
+//
+// For more information, open the README with:
 
 Document.open(thisProcess.nowExecutingPath.dirname +/+ "README.md");
 
-
-// ====== Setup ======
+// ==========================================================================
 
 "Setup.scd".loadRelative;
 
 
-// ====== Players ======
-
-/*
-
-Run a player by pressing cmd + enter on the line. Stop it with cmd + .
-
-The "Conductor" plays ambient music structured according to a score with the following six movements:
-
-1. Intro
-2. First Pads
-3. Shimmer
-4. Ground
-5. Punctuate
-6. Exhale
-
-The "FreePlayer", on the other hand, improvises ambient music and randomly changes instruments, scales and effects over time.
-
-*/
+// ==========================================================================
+//                                 PLAYERS
+// ==========================================================================
+//
+// Choose one of the following players.
+// Run with Cmd + Enter, stop with Cmd + .
+//
+// - Conductor:
+//   Plays ambient music structured according to a score with
+//   six movements:
+//       1. Intro
+//       2. First Pads
+//       3. Shimmer
+//       4. Ground
+//       5. Punctuate
+//       6. Exhale
+//
+// - FreePlayer:
+//   Improvises ambient music and randomly changes instruments,
+//   scales, and effects over time.
+//
+// ==========================================================================
 
 "Player/Conductor.scd".loadRelative;
 
 "Player/FreePlayer.scd".loadRelative;
 
-// For manual changes run this line:
+
+// ==========================================================================
+//                              MANUAL CHECKS
+// ==========================================================================
+//
+// For debugging or manual changes, open the checks file:
 
 Document.open(thisProcess.nowExecutingPath.dirname +/+ "Checks/Checks.scd");
+
+// ==========================================================================
