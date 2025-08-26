@@ -2,7 +2,8 @@
 // --- Make Mixing Console GUI (sliders only) ---
 
 ~makeMixerGUI = {
-	var win, slotWidth, padding, winWidth, nInstruments, rowIndices, channels, colInstrument, colGroup, colFX, colFxMaster, colMaster;
+	var win, slotWidth, paddingSides, rowHeight, winWidth, winHeight, nInstruments, nRows, rowIndices, channels;
+	var colInstrument, colGroup, colFX, colFxMaster, colMaster;
 
 	// Colors
 	colInstrument = Color(0.9, 0.9, 0.9);  // light grey
@@ -44,12 +45,19 @@
 		(name: \Master,      color: colMaster,     type: \master,     ctrlBus: ~masterCtrl)
 	];
 
+	// Layout constants
+	slotWidth     = 100;   // width per channel
+	paddingSides   = 35;   // padding on all sides
+	rowHeight     = 200;   // vertical space per row
+	nRows         = 3;     // instrument / group / fx + master rows
+
+	// Calculate dimensions
+	nInstruments = ~channels.count { |c| c[\type] == \instrument };
+	winWidth  = (nInstruments * slotWidth) + paddingSides;
+	winHeight = (nRows * rowHeight) + paddingSides + 20;
+
 	// Create window
-	slotWidth = 100;
-	padding   = 35;
-	nInstruments = channels.count { |c| c[\type] == \instrument };
-	winWidth  = (nInstruments * slotWidth) + padding;
-	win = Window("AMBIENT MUSIC GENERATOR Mixer", Rect(50, 50, winWidth, 820)).front;
+	win = Window("AMBIENT MUSIC GENERATOR Mixer", Rect(50, 50, winWidth, winHeight)).front;
 
 	// Track row indices for x positioning
 	rowIndices = IdentityDictionary[
@@ -59,24 +67,22 @@
 	];
 
 	// Build channels (sliders + labels only)
-	channels.do { |c, i|
+	~channels.do { |c, i|
 		var name = c[\name], color = c[\color], type = c[\type], ctrlBus = c[\ctrlBus];
 		var slider, label, yOffset, xOffset;
 
 		// row-specific yOffset
-		yOffset = switch(type,
-			\instrument, { 50 },
-			\group,      { 300 },
-			\fx,         { 550 },
-			\master,     { 550 },
-			{ 50 }
-		);
+		yOffset = case
+			{ type == \instrument } { paddingSides }
+			{ type == \group      } { paddingSides + rowHeight }
+			{ type == \fx or: { type == \master } } { paddingSides + (2 * rowHeight) }
+			{ paddingSides };
 
 		// row-specific xOffset
 		if(type == \master) {
-			xOffset = rowIndices[\fx] * 100 + 50;
+			xOffset = rowIndices[\fx] * slotWidth + 50;
 		} {
-			xOffset = rowIndices[type] * 100 + 50;
+			xOffset = rowIndices[type] * slotWidth + 50;
 			rowIndices[type] = rowIndices[type] + 1;
 		};
 
