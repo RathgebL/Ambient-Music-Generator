@@ -41,7 +41,7 @@ Document.open(thisProcess.nowExecutingPath.dirname +/+ "README.md");
 //   Plays ambient music structured according to a score with
 //   six movements:
 //       1. Intro
-//       2. First Pads
+//       2. First Pad
 //       3. Shimmer
 //       4. Ground
 //       5. Punctuate
