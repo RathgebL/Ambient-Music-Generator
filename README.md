@@ -44,7 +44,7 @@ Structured playback with six movements:
 
 1. Intro
 
-2. First Pads
+2. First Pad
 
 3. Shimmer
 
