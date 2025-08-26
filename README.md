@@ -21,7 +21,7 @@ A link to this README
 
 Inside Main.scd, run:
 
-`Setup.scd".loadRelative;``
+```Setup.scd".loadRelative;```
 
 This will:
 
@@ -56,7 +56,7 @@ Structured playback with six movements:
 
 Run it:
 
-`"Player/FreePlayer.scd".loadRelative;`
+```"Player/FreePlayer.scd".loadRelative;```
 
 Stop playback anytime with Cmd + .
 
@@ -79,49 +79,7 @@ Centralized mappings for density, brightness, rhythmicity, and other expressive 
 
 ## Project Structure
 
-Ambient-Music-Generator/
-├── AMG-main.scd                   # Main entry point (banner, setup, players)
-├── Setup.scd                      # Loads everything after server boot
-│
-├── Buses/
-│   └── Buses.scd                  # Bus allocation and reset utilities
-│
-├── Checks/
-│   └── Checks.scd                 # Debugging / manual checks
-│
-├── Engines/
-│   ├── Control/
-│   │   └── Control.scd            # Control engine
-│   │
-│   ├── Harmony/
-│   │   └── Harmony.scd            # Harmony engine
-│   │
-│   ├── Mixing/
-│   │   ├── Mixing-Console.scd     # Mixer engine
-│   │   └── Mixing-Console-GUI.scd # Mixer GUI
-│   │
-│   └── Parameter/
-│       ├── Mappings.scd           # Parameter mappings
-│       └── Parameter.scd          # Parameter engine
-│
-├── Helper/
-│   └── Helpers.scd                # Helpers and utilities
-│
-├── Patterns/
-│   └── Pdefs.scd                  # Pattern and texture definitions
-│
-├── Player/
-│   ├── Conductor.scd              # Conductor (score-based performance)
-│   └── FreePlayer.scd             # Free/improvised performance
-│
-├── Scores/
-│   └── Scores.scd                 # Score structures
-│
-├── Server/
-│   └── Server-Setup.scd           # Server config and options
-│ 
-└── Synths/
-    └── SynthDefs.scd              # All SynthDefs
+``` Ambient-Music-Generator/ ├── AMG-main.scd # Main entry point (banner, setup, players) ├── Setup.scd # Loads everything after server boot │ ├── Buses/ │ └── Buses.scd # Bus allocation and reset utilities │ ├── Checks/ │ └── Checks.scd # Debugging / manual checks │ ├── Engines/ │ ├── Control/ │ │ └── Control.scd # Control engine │ │ │ ├── Harmony/ │ │ └── Harmony.scd # Harmony engine │ │ │ ├── Mixing/ │ │ ├── Mixing-Console.scd # Mixer engine │ │ └── Mixing-Console-GUI.scd # Mixer GUI │ │ │ └── Parameter/ │ ├── Mappings.scd # Parameter mappings │ └── Parameter.scd # Parameter engine │ ├── Helper/ │ └── Helpers.scd # Helpers and utilities │ ├── Patterns/ │ └── Pdefs.scd # Pattern and texture definitions │ ├── Player/ │ ├── Conductor.scd # Conductor (score-based performance) │ └── FreePlayer.scd # Free/improvised performance │ ├── Scores/ │ └── Scores.scd # Score structures │ ├── Server/ │ └── Server-Setup.scd # Server config and options │ └── Synths/ └── SynthDefs.scd # All SynthDefs ```
 
 ## Requirements
 
