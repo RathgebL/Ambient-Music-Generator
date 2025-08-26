@@ -11,7 +11,7 @@
 	),
 
 	(
-		name: \firstPad, fadeTime: 12, paramTime: 60, dur: 8,
+		name: \inhale, fadeTime: 12, paramTime: 60, dur: 8,
 		layersOn: (DarkPad:true, Drone:true, SeaTex:true),
 		targets:  (DarkPad:1.0, Drone:0.7, SeaTex:0.8, Master:1.0, ReverbFX:0.50, DelayFX:0.30),
 		params:   (warmth:0.3, brightness:0.45, density:0.3, variability:0.3, rhythmicity:0.5)
