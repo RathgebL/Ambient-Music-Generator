@@ -1,4 +1,3 @@
-(
 // --- Checks ---
 
 // Define key and scale
@@ -45,4 +44,3 @@ SynthDescLib.global.browse; // browse all available defs
 
 // Reset mixer when all buses are used up
 ~resetMixer.();
-)

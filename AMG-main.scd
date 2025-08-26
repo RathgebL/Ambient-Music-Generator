@@ -6,12 +6,9 @@
 //                                                             //
 // ─────────────────────────────────────────────────────────── //
 
-
-// ====== Setup ======
-
 /*
 
-Run this first (Cmd + Enter on the line).
+Run the "Setup"" first (Cmd + Enter on the line).
 The setup file contains everything from rebooting to setting up all utilities for the generator.
 This step might take a view seconds. Afterwards you can run a player to generate some ambient music.
 
@@ -21,11 +18,8 @@ For more information, run this line:
 
 Document.open(thisProcess.nowExecutingPath.dirname +/+ "README.md");
 
-/*
 
-Have fun!
-
-*/
+// ====== Setup ======
 
 "Setup.scd".loadRelative;
 
@@ -52,3 +46,7 @@ The "FreePlayer", on the other hand, improvises ambient music and randomly chang
 "Player/Conductor.scd".loadRelative;
 
 "Player/FreePlayer.scd".loadRelative;
+
+// For manual changes run this line:
+
+Document.open(thisProcess.nowExecutingPath.dirname +/+ "Checks/Checks.scd");
