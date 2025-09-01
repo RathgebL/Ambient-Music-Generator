@@ -283,6 +283,9 @@ SynthDef(\droneSynth, { |out = 0, freq = 55, amp = 0.2, pan = 0, gate = 1|
 	// no mid
 	stereo = [side, 1 - side];
 
+	// fix DC offset
+	stereo = LeakDC.ar(stereo);
+
 	Out.ar(out, stereo * env * amp);
 }).add;
 
